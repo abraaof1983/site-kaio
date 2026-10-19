@@ -3,6 +3,8 @@ import { DatabaseSync } from "node:sqlite";
 import { scryptSync, randomBytes, timingSafeEqual } from "node:crypto";
 import { mkdirSync } from "node:fs";
 import PDFDocument from "pdfkit";
+import { QUOTE_TEMPLATES, getQuoteTemplate } from "./public/quote-templates.js";
+import { renderQuotePdf } from "./quote-pdf.js";
 const app = express();
 app.disable("x-powered-by");
 app.use(express.json({ limit: "1mb" }));
@@ -62,12 +64,10 @@ app.post("/api/register", (req, res) => {
     typeof password !== "string" ||
     password.length < 10
   )
-    return res
-      .status(400)
-      .json({
-        error:
-          "Informe nome, e-mail válido e senha com pelo menos 10 caracteres.",
-      });
+    return res.status(400).json({
+      error:
+        "Informe nome, e-mail válido e senha com pelo menos 10 caracteres.",
+    });
   if (get("SELECT id FROM users WHERE email=?", email.toLowerCase()))
     return res.status(409).json({ error: "Este e-mail já está cadastrado." });
   const salt = randomBytes(16).toString("hex");
@@ -167,6 +167,7 @@ app.get("/api/data", (req, res) => {
     packages: [],
     documents: [],
     settings: defaultSettings,
+    quoteTemplates: QUOTE_TEMPLATES,
   };
   for (const r of db
     .prepare("SELECT * FROM records WHERE user_id=? ORDER BY id DESC")
@@ -197,6 +198,39 @@ function validate(kind, b) {
       return "Preencha cliente, evento, data e situação.";
     if (!Number.isFinite(Number(b.total)) || Number(b.total) < 0)
       return "Valor inválido.";
+    if (b.type === "quote" && b.templateId) {
+      const template = getQuoteTemplate(b.templateId);
+      if (!template || !template.offers.some((offer) => offer.id === b.offerId))
+        return "Selecione um modelo e uma opção de serviço válidos.";
+      if (
+        b.cashTotal == null ||
+        !Number.isFinite(Number(b.cashTotal)) ||
+        Number(b.cashTotal) < 0
+      )
+        return "Informe um valor à vista válido.";
+      if (
+        b.installmentTotal != null &&
+        (!Number.isFinite(Number(b.installmentTotal)) ||
+          Number(b.installmentTotal) < 0)
+      )
+        return "Informe um valor parcelado válido.";
+      if (
+        !["cash", "installments"].includes(b.paymentChoice) ||
+        (b.paymentChoice === "installments" && b.installmentTotal == null)
+      )
+        return "Selecione uma condição de pagamento disponível.";
+      if (
+        !Number.isInteger(Number(b.installmentCount)) ||
+        Number(b.installmentCount) < 0 ||
+        Number(b.installmentCount) > 36
+      )
+        return "Informe entre 0 e 36 parcelas para o cartão.";
+      const selectedPrice = Number(
+        b.paymentChoice === "installments" ? b.installmentTotal : b.cashTotal,
+      );
+      if (Math.abs(Number(b.total) - selectedPrice) > 0.01)
+        return "O total deve corresponder à condição de pagamento selecionada.";
+    }
     if (
       !Array.isArray(b.payments) ||
       b.payments.some(
@@ -231,6 +265,14 @@ app.post("/api/records/:kind", (req, res) => {
       kind,
     );
   if (b.id && !existing) return res.sendStatus(404);
+  if (kind === "documents" && b.type === "quote") {
+    const old = existing ? JSON.parse(existing.body) : null;
+    b.quoteTemplate = b.templateId
+      ? old?.templateId === b.templateId && old.quoteTemplate
+        ? old.quoteTemplate
+        : structuredClone(getQuoteTemplate(b.templateId))
+      : null;
+  }
   if (kind === "documents" && !existing) {
     b.number = `${b.type === "contract" ? "CT" : "OR"}-${new Date().getFullYear()}-${randomBytes(3).toString("hex").toUpperCase()}`;
     b.company = {
@@ -276,8 +318,18 @@ app.post("/api/documents/:id/convert", (req, res) => {
     .all(req.uid)
     .find((x) => JSON.parse(x.body).sourceId === r.id);
   if (prior) return res.json({ ...JSON.parse(prior.body), id: prior.id });
+  const defaultPaymentNotes =
+    "À vista: parcela única na assinatura. Boleto: condições a combinar, com quitação até 10 dias antes do evento.";
+  const paymentNotes =
+    old.templateId &&
+    old.paymentChoice === "installments" &&
+    old.paymentNotes?.trim() === defaultPaymentNotes
+      ? "Pagamento parcelado no cartão conforme a condição escolhida. Boleto: condições a combinar, com quitação até 10 dias antes do evento."
+      : old.paymentNotes;
   const b = {
     ...old,
+    paymentNotes,
+    clauses: old.clauses || old.company?.clauses || defaultSettings.clauses,
     type: "contract",
     status: "draft",
     sourceId: r.id,
@@ -305,7 +357,7 @@ app.get("/api/documents/:id/pdf", (req, res) => {
   res.setHeader("Content-Type", "application/pdf");
   res.setHeader(
     "Content-Disposition",
-    `attachment; filename="${b.number}.pdf"`,
+    `${req.query.inline === "1" ? "inline" : "attachment"}; filename="${b.number}.pdf"`,
   );
   const doc = new PDFDocument({
     size: "A4",
@@ -319,6 +371,16 @@ app.get("/api/documents/:id/pdf", (req, res) => {
   doc.registerFont("Body", "assets/fonts/DejaVuSans.ttf");
   doc.registerFont("Heading", "assets/fonts/DejaVuSans-Bold.ttf");
   doc.pipe(res);
+  if (b.type === "quote") {
+    renderQuotePdf(
+      doc,
+      b,
+      c,
+      b.quoteTemplate || getQuoteTemplate(b.templateId) || null,
+    );
+    doc.end();
+    return;
+  }
   const text = (s, size = 10) =>
     doc
       .font("Body")
@@ -364,6 +426,12 @@ app.get("/api/documents/:id/pdf", (req, res) => {
   text(b.equipment);
   title("03 / Investimento e pagamento");
   doc.font("Heading").fontSize(22).fillColor("#087f72").text(money(b.total));
+  if (b.templateId && b.paymentChoice) {
+    text(
+      `Condição escolhida: ${b.paymentChoice === "installments" ? "parcelado" : "à vista"}.`,
+    );
+    if (b.paymentChoice === "installments" && b.cardTerms) text(b.cardTerms);
+  }
   text(`Hora adicional: ${money(b.extraHour)} | PIX: ${c.pix || "A combinar"}`);
   for (const [i, p] of b.payments.entries())
     text(

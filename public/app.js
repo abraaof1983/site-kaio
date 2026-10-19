@@ -1,3 +1,5 @@
+import { QUOTE_TEMPLATES, dateBeforeEvent } from "./quote-templates.js";
+
 const $ = (s) => document.querySelector(s),
   root = $("#app"),
   modal = $("#modal");
@@ -170,9 +172,14 @@ function content() {
         : "Cada detalhe combinado. Cada celebração protegida.",
       `<button class="primary" data-new="${isQ ? "quote" : "contract"}">＋ Novo ${isQ ? "orçamento" : "contrato"}</button>`,
     ) +
+    (isQ ? quoteGallery() : "") +
     toolbar(true) +
     `<div class="panel" id="list">${docTable(docs(isQ ? "quote" : "contract"), false)}</div>`
   );
+}
+function quoteGallery() {
+  const templates = state.quoteTemplates || QUOTE_TEMPLATES;
+  return `<section class="quote-gallery" aria-labelledby="quote-models-title"><div class="quote-gallery-heading"><div><p class="eyebrow">SUA IDENTIDADE EM CADA PROPOSTA</p><h2 id="quote-models-title">Modelos prontos para impressionar</h2><p>Escolha o espaço, personalize os detalhes e gere um PDF com sua marca.</p></div><span class="quote-gallery-badge">3 modelos incluídos</span></div><div class="quote-models">${templates.map((t, i) => `<article class="quote-model"><div class="quote-model-cover"><img class="quote-model-photo" src="/quote-assets/estrutura.png" alt="Estrutura de som e iluminação do DJ Kaio Jansen" loading="lazy"><div class="quote-model-shade"></div><img class="quote-model-logo" src="/quote-assets/logo.jpg" alt="Kaio Jansen"><span class="quote-model-number">MODELO 0${i + 1}</span><div class="quote-model-cover-title"><span>UMA CELEBRAÇÃO COM A SUA IDENTIDADE</span><strong>${esc(t.name)}</strong></div></div><div class="quote-model-body"><p>${esc(t.description)}</p><div class="quote-model-tags"><span>PDF com fotos e marca</span><span>${t.offers.length > 1 ? `${t.offers.length} opções de serviço` : "Pacote completo"}</span></div><button type="button" data-quote-template="${esc(t.id)}">Usar modelo <svg aria-hidden="true" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7"><path d="M7 17 17 7M7 7h10v10"/></svg></button></div></article>`).join("")}</div></section>`;
 }
 function toolbar(withFilter = false) {
   return `<div class="toolbar"><input type="search" id="search" placeholder="Buscar por nome ou evento…" aria-label="Buscar">${
@@ -252,7 +259,7 @@ function docTable(list, compact) {
       "quote",
       "Criar primeiro orçamento",
     );
-  return `<div class="table-wrap"><table><thead><tr><th>CLIENTE / EVENTO</th><th>DATA</th><th>VALOR</th><th>SITUAÇÃO</th><th>AÇÕES</th></tr></thead><tbody>${list.map((d) => `<tr><td><strong>${esc(d.client.name)}</strong><small>${esc(d.event)} · ${d.type === "quote" ? "ORÇ." : "CONT."}</small></td><td>${date(d.date)}</td><td>${money(d.total)}</td><td>${badge(d.status)}</td><td><div class="rowactions"><button data-edit-doc="${d.id}" title="Editar documento">Editar</button><button data-pdf="${d.id}" title="Baixar PDF">PDF ↓</button>${d.type === "quote" ? `<button data-convert="${d.id}" title="Converter em contrato">→ Contrato</button>` : ""}</div></td></tr>`).join("")}</tbody></table></div>`;
+  return `<div class="table-wrap"><table><thead><tr><th>CLIENTE / EVENTO</th><th>DATA</th><th>VALOR</th><th>SITUAÇÃO</th><th>AÇÕES</th></tr></thead><tbody>${list.map((d) => `<tr><td><strong>${esc(d.client.name)}</strong><small>${esc(d.event)} · ${d.type === "quote" ? "ORÇ." : "CONT."}</small></td><td>${date(d.date)}</td><td>${money(d.total)}</td><td>${badge(d.status)}</td><td><div class="rowactions"><button data-edit-doc="${d.id}" title="Editar documento">Editar</button><button data-preview-pdf="${d.id}" title="Visualizar PDF em outra aba">Visualizar PDF ↗</button><button data-pdf="${d.id}" title="Baixar PDF">Baixar ↓</button>${d.type === "quote" ? `<button data-convert="${d.id}" title="Converter em contrato">→ Contrato</button>` : ""}</div></td></tr>`).join("")}</tbody></table></div>`;
 }
 function clientTable() {
   const list = state.clients.filter((c) =>
@@ -277,7 +284,7 @@ function settings() {
     `<section class="panel settings-panel"><div class="notice">As cláusulas foram adaptadas dos documentos enviados. Revise o texto com assessoria jurídica antes do uso. Alterações aqui valem para novos documentos; os já emitidos mantêm os dados registrados.</div><form id="settingsform"><div class="form-grid">${field("Empresa", "company", c.company, "text", true)}${field("Representante", "representative", c.representative)}${field("CNPJ", "cnpj", c.cnpj)}${field("E-mail", "email", c.email, "email")}${field("Telefone", "phone", c.phone)}${field("Chave PIX", "pix", c.pix)}${field("Endereço", "address", c.address, "text", false, true)}${area("Cláusulas padrão · editáveis", "clauses", c.clauses)}</div><button class="primary" style="margin-top:22px">Salvar configurações</button><div class="error" role="alert"></div></form></section>`
   );
 }
-function openModal(title, html, onSubmit) {
+function openModal(title, html, onSubmit, onSaved) {
   modal.innerHTML = `<form id="modalform"><div class="modal-head"><h2>${title}</h2><button type="button" data-close aria-label="Fechar">×</button></div><div class="modal-body"><div class="form-grid">${html}</div><div class="error" role="alert"></div></div><div class="modal-foot"><button type="button" data-close>Cancelar</button><button class="primary">Salvar ${title.toLowerCase().includes("orçamento") ? "orçamento" : title.toLowerCase().includes("contrato") ? "contrato" : "cadastro"}</button></div></form>`;
   modal
     .querySelectorAll("[data-close]")
@@ -287,10 +294,11 @@ function openModal(title, html, onSubmit) {
     const b = e.submitter;
     b.disabled = true;
     try {
-      await onSubmit(Object.fromEntries(new FormData(e.target)));
+      const saved = await onSubmit(Object.fromEntries(new FormData(e.target)));
       modal.close();
       await load();
       toast("Salvo com sucesso.");
+      if (onSaved) onSaved(saved);
     } catch (err) {
       modal.querySelector(".error").textContent = err.message;
     } finally {
@@ -299,7 +307,7 @@ function openModal(title, html, onSubmit) {
   };
   modal.showModal();
 }
-function editClient(c = {}) {
+function editClient(c = {}, onSaved) {
   openModal(
     c.id ? "Editar cliente" : "Novo cliente",
     field("Nome completo", "name", c.name, "text", true) +
@@ -308,6 +316,7 @@ function editClient(c = {}) {
       field("Telefone", "phone", c.phone) +
       field("Endereço completo", "address", c.address, "text", false, true),
     (b) => api("/records/clients", { ...b, id: c.id }),
+    onSaved,
   );
 }
 function editPackage(p = {}) {
@@ -321,24 +330,107 @@ function editPackage(p = {}) {
   );
 }
 function editDoc(type, d = {}) {
-  if (!state.clients.length) {
+  if (!state.clients.length && !d.id) {
     toast("Cadastre um cliente antes de criar seu documento.");
     page = "clients";
     render();
-    editClient();
+    editClient({}, (client) => {
+      page = type === "quote" ? "quotes" : "contracts";
+      render();
+      editDoc(type, { ...d, clientId: client.id });
+    });
     return;
   }
-  const c = d.client || state.clients[0],
+  const isQuote = type === "quote",
+    templates = state.quoteTemplates || QUOTE_TEMPLATES,
+    templateId = isQuote
+      ? d.id
+        ? d.templateId
+        : (d.templateId ?? templates[0]?.id)
+      : null,
+    template = templates.find((t) => t.id === templateId),
+    initialOffer =
+      template?.offers.find((o) => o.id === d.offerId) || template?.offers[0],
     p = state.packages[0] || {};
+  const cardTerms = (price, count) =>
+    price != null && count > 0
+      ? `Até ${count}x de ${money(price / count)} no cartão.`
+      : "Condições de parcelamento a combinar.";
+  const offerPaymentNotes = (offer) =>
+    offer.id === "complete"
+      ? "À vista: parcela única na assinatura. Boleto: condições a combinar, com quitação até 10 dias antes do evento."
+      : "Condições de pagamento a combinar.";
+  const templateDefaults = (t, offer) => ({
+    templateId: t.id,
+    offerId: offer.id,
+    quoteHeadline: t.headline,
+    introduction: t.introduction,
+    venue: t.venue,
+    packageId: "",
+    packageName: offer.name,
+    equipment: offer.equipment,
+    cashTotal: offer.cashPrice,
+    installmentTotal: offer.installmentPrice,
+    installmentCount: offer.installmentCount,
+    paymentChoice: "cash",
+    cardTerms:
+      offer.installmentPrice == null
+        ? ""
+        : cardTerms(offer.installmentPrice, offer.installmentCount),
+    total: offer.cashPrice,
+    paymentNotes: offerPaymentNotes(offer),
+    notes: [offer.description, t.reservationNotes].filter(Boolean).join("\n\n"),
+  });
+  const data =
+    template && !d.id
+      ? { ...templateDefaults(template, initialOffer), ...d }
+      : { ...d };
+  const c =
+      d.client ||
+      state.clients.find(
+        (client) => String(client.id) === String(d.clientId),
+      ) ||
+      state.clients[0] ||
+      {},
+    selectedClientId = d.clientId ?? c.id,
+    clientOptions = state.clients.map((client) => [client.id, client.name]);
+  if (
+    d.client &&
+    !clientOptions.some(([id]) => String(id) === String(selectedClientId))
+  ) {
+    clientOptions.unshift([
+      selectedClientId,
+      `${d.client.name} (dados do documento)`,
+    ]);
+  }
+  const quoteFields = isQuote
+    ? `<div class="form-section">MODELO DO ORÇAMENTO</div>${select("Modelo visual", "templateId", [["", "Personalizado"], ...templates.map((t) => [t.id, t.name])], template?.id || "")}<div class="field"><label>Identidade do documento</label><p class="helper quote-form-intro">Os modelos incluem marca, foto da estrutura e condições comerciais. Todos os valores são editáveis.</p></div><div class="quote-template-fields" id="quote-template-fields" ${template ? "" : "hidden"}>${select(
+        "Opção de serviço do modelo",
+        "offerId",
+        (template?.offers || []).map((o) => [o.id, o.name]),
+        data.offerId || initialOffer?.id,
+      )}${field("Título da proposta", "quoteHeadline", data.quoteHeadline || template?.headline)}${area("Apresentação", "introduction", data.introduction)}</div>`
+    : "";
+  const quotePriceFields = isQuote
+    ? `<div class="quote-template-fields" id="quote-price-fields" ${template ? "" : "hidden"}>${field("Valor à vista (R$)", "cashTotal", data.cashTotal, "number")}${field("Valor total parcelado (R$) · opcional", "installmentTotal", data.installmentTotal, "number")}${field("Quantidade máxima de parcelas · 0 = a combinar", "installmentCount", data.installmentCount ?? 0, "number")}${select(
+        "Condição escolhida para este orçamento",
+        "paymentChoice",
+        [
+          ["cash", "À vista"],
+          ["installments", "Parcelado"],
+        ],
+        data.paymentChoice || "cash",
+      )}${area("Condições do cartão · editáveis", "cardTerms", data.cardTerms)}<p class="helper full" id="quote-payment-helper"></p></div>`
+    : "";
   openModal(
     d.id
       ? "Editar " + (type === "quote" ? "orçamento" : "contrato")
       : "Novo " + (type === "quote" ? "orçamento" : "contrato"),
-    `<div class="form-section">01 / CLIENTE E EVENTO</div>${select(
+    `${quoteFields}<div class="form-section">01 / CLIENTE E EVENTO</div>${select(
       "Cliente",
       "clientId",
-      state.clients.map((c) => [c.id, c.name]),
-      d.clientId || c.id,
+      clientOptions,
+      selectedClientId,
       true,
     )}${select(
       "Situação",
@@ -347,7 +439,7 @@ function editDoc(type, d = {}) {
         ([v]) => type === "contract" || v !== "signed",
       ),
       d.status || "draft",
-    )}${field("Nome do evento", "event", d.event, "text", true)}${field("Data do evento", "date", d.date, "date", true)}${field("Local / endereço do evento", "venue", d.venue, "text", false, true)}${field("Convidados", "guests", d.guests, "number")}${field("Montagem", "setup", d.setup, "time")}${field("Cerimônia", "ceremony", d.ceremony, "time")}${field("Início da festa", "start", d.start, "time")}${field("Término (pode ser no dia seguinte)", "end", d.end, "time")}<div class="form-section">02 / SERVIÇOS E VALORES</div>${select("Pacote de referência", "packageId", [["", "Personalizado"], ...state.packages.map((p) => [p.id, p.name])], d.id ? d.packageId : p.id)}${field("Nome do pacote / serviço", "packageName", d.packageName || p.name, "text", true)}${area("Equipamentos e serviços incluídos", "equipment", d.equipment ?? p.equipment)}${field("Valor total (R$)", "total", d.total ?? p.price, "number", true)}${field("Hora adicional (R$)", "extraHour", d.extraHour ?? 500, "number")}${type === "quote" ? field("Validade do orçamento", "validUntil", d.validUntil, "date", true) : ""}<div class="field full"><label>Parcelas</label><div class="helper">Cadastre os vencimentos. A soma precisa corresponder ao total. Deixe vazio se ainda não houver parcelamento definido.</div><div id="payments"></div><button type="button" id="addpayment" style="align-self:flex-start">＋ Adicionar parcela</button></div>${area("Forma de pagamento e condições", "paymentNotes", d.paymentNotes || "Pagamento via PIX ou dinheiro.")}<div class="form-section">03 / CONDIÇÕES DO DOCUMENTO</div>${type === "contract" ? area("Cláusulas contratuais · revise antes de emitir", "clauses", d.clauses ?? state.settings.clauses) : ""}${type === "contract" ? `<div class="field full"><label><input type="checkbox" name="imageConsent" ${d.imageConsent ? "checked" : ""}> O cliente autorizou expressamente o uso de imagem</label><p class="helper">Marque “Assinado” apenas após coletar a assinatura. O sistema gera PDFs; não realiza assinatura eletrônica.</p></div>` : ""}${area("Observações adicionais", "notes", d.notes)}`,
+    )}${field("Nome do evento", "event", data.event, "text", true)}${field("Data do evento", "date", data.date, "date", true)}${field("Local / endereço do evento", "venue", data.venue, "text", false, true)}${field("Convidados", "guests", data.guests, "number")}${field("Montagem", "setup", data.setup, "time")}${field("Cerimônia", "ceremony", data.ceremony, "time")}${field("Início da festa", "start", data.start, "time")}${field("Término (pode ser no dia seguinte)", "end", data.end, "time")}<div class="form-section">02 / SERVIÇOS E VALORES</div>${select("Pacote de referência", "packageId", [["", "Personalizado"], ...state.packages.map((p) => [p.id, p.name])], template ? "" : d.id ? data.packageId : p.id)}${field("Nome do pacote / serviço", "packageName", data.packageName ?? p.name, "text", true)}${area("Equipamentos e serviços incluídos", "equipment", data.equipment ?? p.equipment)}${quotePriceFields}${field("Valor total do documento (R$)", "total", data.total ?? p.price, "number", true)}${field("Hora adicional (R$)", "extraHour", data.extraHour ?? 500, "number")}${isQuote ? field("Validade do orçamento", "validUntil", data.validUntil, "date", true) : ""}<div class="field full"><label>Vencimentos do pagamento</label><div class="helper">Use para registrar pagamentos já combinados. A soma precisa corresponder ao total. As opções de cartão do modelo não exigem o cadastro de vencimentos.</div><div id="payments"></div><button type="button" id="addpayment" style="align-self:flex-start">＋ Adicionar parcela</button></div>${area("Forma de pagamento e condições", "paymentNotes", data.paymentNotes ?? "Pagamento via PIX ou dinheiro.")}<div class="form-section">03 / CONDIÇÕES DO DOCUMENTO</div>${type === "contract" ? area("Cláusulas contratuais · revise antes de emitir", "clauses", data.clauses ?? state.settings.clauses) : ""}${type === "contract" ? `<div class="field full"><label><input type="checkbox" name="imageConsent" ${data.imageConsent ? "checked" : ""}> O cliente autorizou expressamente o uso de imagem</label><p class="helper">Marque “Assinado” apenas após coletar a assinatura. O sistema gera PDFs; não realiza assinatura eletrônica.</p></div>` : ""}${area("Observações adicionais", "notes", data.notes)}`,
     async (b) => {
       const payments = [...modal.querySelectorAll(".payment-row")].map(
         (row) => ({
@@ -355,9 +447,47 @@ function editDoc(type, d = {}) {
           amount: Number(row.querySelector("[type=number]").value),
         }),
       );
-      const client = state.clients.find((c) => String(c.id) === b.clientId);
+      const client =
+        d.id && String(d.clientId ?? d.client?.id) === b.clientId && d.client
+          ? d.client
+          : state.clients.find((c) => String(c.id) === b.clientId);
+      const optionalNumber = (value) =>
+        value == null || value === "" ? null : Number(value);
+      const selectedTemplate =
+        isQuote && templates.find((t) => t.id === b.templateId);
+      const quoteValues = isQuote
+        ? {
+            templateId: selectedTemplate?.id || null,
+            offerId: selectedTemplate ? b.offerId || null : null,
+            quoteHeadline: selectedTemplate
+              ? b.quoteHeadline?.trim() || null
+              : null,
+            introduction: selectedTemplate
+              ? b.introduction?.trim() || null
+              : null,
+            cashTotal: selectedTemplate ? optionalNumber(b.cashTotal) : null,
+            installmentTotal: selectedTemplate
+              ? optionalNumber(b.installmentTotal)
+              : null,
+            installmentCount: selectedTemplate
+              ? optionalNumber(b.installmentCount)
+              : null,
+            paymentChoice: selectedTemplate ? b.paymentChoice : null,
+            cardTerms: selectedTemplate ? b.cardTerms?.trim() || null : null,
+          }
+        : {};
+      if (selectedTemplate) {
+        const selectedTotal =
+          quoteValues.paymentChoice === "installments"
+            ? quoteValues.installmentTotal
+            : quoteValues.cashTotal;
+        if (selectedTotal == null || !Number.isFinite(selectedTotal))
+          throw Error("Informe o valor da condição de pagamento escolhida.");
+        b.total = selectedTotal;
+      }
       await api("/records/documents", {
         ...b,
+        ...quoteValues,
         id: d.id,
         type,
         client: { ...client },
@@ -376,7 +506,7 @@ function editDoc(type, d = {}) {
     row.querySelector("button").onclick = () => row.remove();
     $("#payments").append(row);
   };
-  for (const payment of d.payments || []) addPayment(payment);
+  for (const payment of data.payments || []) addPayment(payment);
   $("#addpayment").onclick = () => addPayment();
   $("#f-packageId").onchange = (e) => {
     const p = state.packages.find((p) => String(p.id) === e.target.value);
@@ -386,8 +516,105 @@ function editDoc(type, d = {}) {
       $("#f-equipment").value = p.equipment;
     }
   };
+  if (isQuote) {
+    const numberValue = (name) =>
+      $("#f-" + name).value === "" ? null : Number($("#f-" + name).value);
+    const updatePrice = (updateCard = false) => {
+      const active = Boolean($("#f-templateId").value);
+      $("#quote-template-fields").hidden = !active;
+      $("#quote-price-fields").hidden = !active;
+      for (const id of ["quote-template-fields", "quote-price-fields"]) {
+        document
+          .querySelectorAll(`#${id} input, #${id} select, #${id} textarea`)
+          .forEach((input) => {
+            input.disabled = !active;
+          });
+      }
+      $("#f-packageId").disabled = active;
+      $("#f-total").readOnly = active;
+      $("#f-cashTotal").required = active;
+      $("#f-installmentCount").required = active;
+      $("#f-installmentCount").step = "1";
+      $("#f-installmentCount").max = "36";
+      const hasInstallments = numberValue("installmentTotal") !== null;
+      $("#f-paymentChoice").querySelector('[value="installments"]').disabled =
+        !hasInstallments;
+      if (!hasInstallments) $("#f-paymentChoice").value = "cash";
+      if (active) {
+        const selectedPrice = numberValue(
+          $("#f-paymentChoice").value === "installments"
+            ? "installmentTotal"
+            : "cashTotal",
+        );
+        $("#f-total").value = selectedPrice ?? "";
+        if (updateCard)
+          $("#f-cardTerms").value = hasInstallments
+            ? cardTerms(
+                numberValue("installmentTotal"),
+                numberValue("installmentCount") || 0,
+              )
+            : "";
+      }
+      const boletoDate = dateBeforeEvent($("#f-date").value);
+      $("#quote-payment-helper").textContent =
+        `O total do documento acompanha a condição escolhida. ${boletoDate ? `Boleto: vencimento até ${date(boletoDate)}, 10 dias antes do evento.` : "Defina a data do evento para calcular o vencimento do boleto (10 dias antes)."}`;
+    };
+    const applyTemplate = () => {
+      const selected = templates.find((t) => t.id === $("#f-templateId").value);
+      if (!selected) {
+        $("#f-offerId").innerHTML = "";
+        updatePrice();
+        return;
+      }
+      const offer = selected.offers[0];
+      $("#f-offerId").innerHTML = selected.offers
+        .map((o) => `<option value="${esc(o.id)}">${esc(o.name)}</option>`)
+        .join("");
+      const defaults = templateDefaults(selected, offer);
+      for (const [name, value] of Object.entries(defaults)) {
+        const input = $("#f-" + name);
+        if (input) input.value = value ?? "";
+      }
+      updatePrice();
+    };
+    $("#f-templateId").onchange = applyTemplate;
+    $("#f-offerId").onchange = () => {
+      const selected = templates.find((t) => t.id === $("#f-templateId").value);
+      const offer = selected?.offers.find(
+        (o) => o.id === $("#f-offerId").value,
+      );
+      if (!offer) return;
+      for (const [name, value] of Object.entries({
+        packageName: offer.name,
+        equipment: offer.equipment,
+        cashTotal: offer.cashPrice,
+        installmentTotal: offer.installmentPrice,
+        installmentCount: offer.installmentCount,
+        cardTerms:
+          offer.installmentPrice == null
+            ? ""
+            : cardTerms(offer.installmentPrice, offer.installmentCount),
+        paymentNotes: offerPaymentNotes(offer),
+        notes: [offer.description, selected.reservationNotes]
+          .filter(Boolean)
+          .join("\n\n"),
+      }))
+        $("#f-" + name).value = value ?? "";
+      updatePrice();
+    };
+    for (const name of ["cashTotal", "installmentTotal", "installmentCount"]) {
+      $("#f-" + name).oninput = () => updatePrice(true);
+    }
+    $("#f-paymentChoice").onchange = () => updatePrice();
+    $("#f-date").onchange = () => updatePrice();
+    updatePrice();
+  }
 }
 function bind() {
+  root.querySelectorAll("[data-quote-template]").forEach((button) => {
+    button.onclick = () =>
+      editDoc("quote", { templateId: button.dataset.quoteTemplate });
+  });
   root.querySelectorAll("[data-page]").forEach(
     (b) =>
       (b.onclick = () => {
@@ -435,15 +662,7 @@ function bind() {
         editDoc(d.type, d);
       }),
   );
-  root.querySelectorAll("[data-pdf]").forEach(
-    (b) =>
-      (b.onclick = () => {
-        const a = document.createElement("a");
-        a.href = `/api/documents/${b.dataset.pdf}/pdf`;
-        a.download = "";
-        a.click();
-      }),
-  );
+  bindDocumentPdfs();
   root.querySelectorAll("[data-convert]").forEach(
     (b) =>
       (b.onclick = async () => {
@@ -505,12 +724,7 @@ function bind() {
               state.clients.find((c) => c.id === Number(b.dataset.editClient)),
             )),
       );
-    root.querySelectorAll("#list [data-pdf]").forEach(
-      (b) =>
-        (b.onclick = () => {
-          location.href = `/api/documents/${b.dataset.pdf}/pdf`;
-        }),
-    );
+    bindDocumentPdfs();
     root.querySelectorAll("#list [data-convert]").forEach(
       (b) =>
         (b.onclick = async () => {
@@ -542,6 +756,24 @@ function bind() {
         e.target.querySelector(".error").textContent = err.message;
       }
     };
+}
+function bindDocumentPdfs() {
+  root.querySelectorAll("[data-preview-pdf]").forEach((button) => {
+    button.onclick = () =>
+      window.open(
+        `/api/documents/${button.dataset.previewPdf}/pdf?inline=1`,
+        "_blank",
+        "noopener,noreferrer",
+      );
+  });
+  root.querySelectorAll("[data-pdf]").forEach((button) => {
+    button.onclick = () => {
+      const link = document.createElement("a");
+      link.href = `/api/documents/${button.dataset.pdf}/pdf`;
+      link.download = "";
+      link.click();
+    };
+  });
 }
 async function start() {
   try {
