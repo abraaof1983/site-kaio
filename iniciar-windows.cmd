@@ -6,11 +6,12 @@ if errorlevel 1 goto pasta_invalida
 rem Usa somente o runtime descompactado pelo usuario nesta pasta.
 rem Nao altera o PATH do Windows nem instala programas no sistema.
 set "AOF_NODE_DIR="
-set "AOF_MULTIPLE_RUNTIMES="
 if exist "%~dp0runtime\node.exe" set "AOF_NODE_DIR=%~dp0runtime"
 if defined AOF_NODE_DIR goto runtime_encontrado
-for /d %%D in ("%~dp0runtime\node-v24.*-win-*") do call :selecionar_runtime "%%~fD"
-if defined AOF_MULTIPLE_RUNTIMES goto runtime_ambiguo
+set /a AOF_RUNTIME_COUNT=0 >nul
+for /d %%D in ("%~dp0runtime\node-v24.*-win-*") do if exist "%%~fD\node.exe" set /a AOF_RUNTIME_COUNT+=1 >nul
+if %AOF_RUNTIME_COUNT% GTR 1 goto runtime_ambiguo
+for /d %%D in ("%~dp0runtime\node-v24.*-win-*") do if exist "%%~fD\node.exe" set "AOF_NODE_DIR=%%~fD"
 if not defined AOF_NODE_DIR goto runtime_ausente
 
 :runtime_encontrado
@@ -25,17 +26,12 @@ call "%AOF_NODE_DIR%\npm.cmd" ci --no-audit --no-fund
 if errorlevel 1 goto falha
 
 echo.
-echo Acesse http://localhost:3000 no navegador depois da mensagem de inicializacao.
+if not defined PORT set "PORT=3000"
+echo Acesse http://localhost:%PORT% no navegador depois da mensagem de inicializacao.
 echo Mantenha esta janela aberta enquanto usa o sistema.
 echo.
 call "%AOF_NODE_DIR%\npm.cmd" start
 if errorlevel 1 goto falha
-exit /b 0
-
-:selecionar_runtime
-if not exist "%~1\node.exe" exit /b 0
-if defined AOF_NODE_DIR set "AOF_MULTIPLE_RUNTIMES=1"
-set "AOF_NODE_DIR=%~1"
 exit /b 0
 
 :runtime_ausente
