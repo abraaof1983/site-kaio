@@ -65,3 +65,19 @@ npm audit --omit=dev
 ```
 
 O teste de integração usa banco temporário e verifica cadastro/login, isolamento entre contas, parcelas, conversão idempotente de orçamento em contrato, preservação dos dados da emissão e geração de PDF. Não cria dados de demonstração no banco da aplicação.
+
+## Modelos de orçamento embarcados
+
+O módulo **Orçamentos** inclui os modelos **Lagoa Vila Serena**, **Castelli Mondini** e **Gottesgabe Eventos**, com a identidade visual, logo e imagem ilustrativa dos exemplos enviados. Os modelos ficam disponíveis também para contas já existentes, sem recriar usuários ou substituir cadastros.
+
+Clique em **Usar modelo**, selecione o cliente e preencha a data do novo evento. O local, os serviços, os equipamentos e os preços de referência são preenchidos e continuam editáveis antes da emissão. O modelo Castelli inclui opções de pacote completo, iluminação, somente DJ e cerimônia externa. Os exemplos não especificam equipamentos do kit de cerimônia ou da opção de iluminação: confirme a composição ao negociar.
+
+Os valores à vista e parcelado são separados. A condição escolhida define o total do orçamento e do contrato resultante; as demais ofertas são alternativas, não valores somados. Somente o pacote completo tem referência de até 10 parcelas no cartão. A data de quitação de boleto é calculada para 10 dias antes do evento. O PDF diferencia proposta comercial de contrato e não inclui assinatura ou cláusulas contratuais no orçamento.
+
+Use **Visualizar PDF** para conferir e **Baixar PDF** para salvar. O PDF é gerado com imagens e fontes locais, sem depender de serviços externos. O modelo e os valores ficam registrados no documento; atualizar o catálogo não altera automaticamente propostas anteriores.
+
+## Onde ficam minha conta e meus cadastros?
+
+Na execução local, os usuários, as senhas derivadas, os clientes e os documentos ficam **no seu computador**, no banco `data/app.sqlite`. As senhas usam scrypt com salt individual e não ficam salvas como texto legível. Os dados não são enviados ao GitHub e não são compartilhados automaticamente com outro computador.
+
+Para atualizar o sistema, encerre o servidor, atualize o código e execute o iniciador novamente. **Preserve a pasta `data/`**. Para fazer uma cópia de segurança simples, feche o servidor e copie a pasta `data/` inteira para um local seguro; não copie apenas o arquivo principal enquanto o servidor estiver em execução.
