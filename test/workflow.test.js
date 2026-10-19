@@ -77,7 +77,7 @@ test("cadastro, isolamento, orçamento, contrato, parcelas e PDF", async () => {
     assert.equal(contract.id, duplicate.id);
     const pdf = await call(`/documents/${contract.id}/pdf`);
     assert.equal(pdf.subarray(0, 5).toString(), "%PDF-");
-    writeFileSync("/tmp/aof-contract-test.pdf", pdf);
+    writeFileSync(join(dir, "contract.pdf"), pdf);
     const settings = await call("/records/settings", {
       ...data.settings,
       company: "Outro nome",
