@@ -24,6 +24,19 @@ Para publicar para outras pessoas, utilize uma hospedagem que execute **Node.js 
 
 O servidor utiliza a porta 3000, configurável por `PORT`. Crie sua conta na tela inicial. Não há usuário ou senha padrão. Cada conta mantém seus próprios cadastros e documentos. O pacote inicial é editável.
 
+## Sem administrador no Windows
+
+O Node.js também é distribuído em **ZIP portátil**, que funciona a partir de uma pasta do usuário sem instalação ou alterações no Windows.
+
+1. Baixe o arquivo oficial [Node.js 24.22.0 para Windows x64 (ZIP)](https://nodejs.org/dist/v24.22.0/node-v24.22.0-win-x64.zip). Se o computador usa processador ARM, use o [ZIP ARM64](https://nodejs.org/dist/v24.22.0/node-v24.22.0-win-arm64.zip).
+2. Na pasta do projeto, crie uma pasta chamada `runtime` e use **Extrair tudo** no ZIP. Preserve a pasta interna: deve existir `runtime/node-v24.22.0-win-x64/node.exe` (ou a variante ARM64). Extraia também todos os demais arquivos; não copie apenas o `node.exe`.
+3. Dê duplo clique em **`iniciar-windows.cmd`**, na pasta do projeto. Ele usa essa versão portátil, instala as dependências no próprio projeto e inicia o servidor. Precisa de Internet para baixar as dependências. Não execute como administrador.
+4. Quando aparecer a mensagem de inicialização, mantenha a janela aberta e acesse **http://localhost:3000** no navegador.
+
+O iniciador limita o PATH à própria janela; não modifica configurações globais. O runtime, o cache e os cadastros não são enviados ao Git. `npm ci` reinstala as dependências a cada execução e não apaga o banco em `data/`. A execução do arquivo CMD não foi testada em Windows neste ambiente Linux.
+
+Os checksums oficiais são publicados em [SHASUMS256.txt](https://nodejs.org/dist/v24.22.0/SHASUMS256.txt). Para o ZIP x64 acima, o SHA-256 é `f9683a19877e12a9b167305c8db71040d812876359de21f0d2e97c3f321f80c3`.
+
 ## Fluxo
 
 1. Cadastre sua conta e revise os dados da empresa em **Configurações**.
