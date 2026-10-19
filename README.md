@@ -4,12 +4,23 @@ Sistema web em português para clientes, pacotes e preços, orçamentos e contra
 
 ## Executar
 
-Requisito: Node.js 24 (SQLite nativo) e npm.
+O sistema precisa de um servidor Node.js: **abrir `public/index.html` com duplo clique não inicia a aplicação**. O GitHub guarda o código; GitHub Pages não executa o banco de dados e as APIs deste projeto.
+
+1. Instale o **Node.js 24 LTS** em https://nodejs.org/ (o npm vem incluído).
+2. Abra o terminal na pasta clonada, onde está o `package.json`. No Windows, abra essa pasta no Explorador de Arquivos, digite `cmd` na barra de endereço e pressione Enter.
+3. Se o clone já existia antes da publicação, atualize-o com `git pull`.
+4. Execute os comandos:
 
 ```sh
 npm ci
 npm start
 ```
+
+5. Mantenha o terminal aberto e acesse **http://localhost:3000** no navegador. Crie sua conta por **Primeiro acesso? Criar uma conta**.
+
+Se o terminal informar que `node` ou `npm` não foi encontrado, instale o Node.js e abra o terminal novamente. Confira a versão com `node --version`: utilize a versão 24 LTS. Se aparecer um erro no terminal, o servidor não iniciou; preserve a mensagem para diagnóstico.
+
+Para publicar para outras pessoas, utilize uma hospedagem que execute **Node.js 24** com comando de instalação `npm ci`, comando de início `npm start` e disco persistente para `data/`. Somente enviar os arquivos ao GitHub ou publicar no GitHub Pages não inicia o sistema.
 
 O servidor utiliza a porta 3000, configurável por `PORT`. Crie sua conta na tela inicial. Não há usuário ou senha padrão. Cada conta mantém seus próprios cadastros e documentos. O pacote inicial é editável.
 

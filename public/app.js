@@ -54,7 +54,9 @@ async function api(url, body) {
     try {
       e = await r.json();
     } catch {}
-    throw Error(e?.error || "Não foi possível concluir a operação.");
+    const error = Error(e?.error || "Não foi possível concluir a operação.");
+    error.status = r.status;
+    throw error;
   }
   return r.json();
 }
@@ -541,9 +543,17 @@ function bind() {
       }
     };
 }
-try {
-  user = await api("/me");
-  await load();
-} catch {
-  auth();
+async function start() {
+  try {
+    user = await api("/me");
+    await load();
+  } catch (error) {
+    if (error.status === 401) {
+      auth();
+      return;
+    }
+    root.innerHTML = `<main class="startup" role="alert"><h1>Servidor indisponível</h1><p>A interface abriu, mas não conseguiu se conectar ao servidor do sistema. Confira o terminal onde o servidor foi iniciado.</p><p>Na pasta do projeto, com Node.js 24 instalado, execute:</p><pre>npm ci\nnpm start</pre><p>Depois, mantenha o terminal aberto e acesse <a href="http://localhost:3000">http://localhost:3000</a>.</p><p>Hospedagens estáticas, como GitHub Pages, não executam o servidor Node.js, o banco de dados ou a geração de PDFs.</p><button id="retry-start" type="button">Tentar novamente</button></main>`;
+    $("#retry-start").onclick = start;
+  }
 }
+if (location.protocol !== "file:") await start();

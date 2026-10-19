@@ -4,12 +4,94 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>AOF Studio · Gestão de eventos</title>
-    <link rel="stylesheet" href="/style.css" />
+    <link rel="stylesheet" href="./style.css" />
+    <style>
+      .startup {
+        max-width: 640px;
+        margin: 10vh auto;
+        padding: 32px;
+        background: white;
+        border: 1px solid #dce4e0;
+        border-radius: 14px;
+        font-family: system-ui, sans-serif;
+        color: #263b39;
+      }
+      .startup h1 {
+        font-size: 26px;
+      }
+      .startup p {
+        line-height: 1.7;
+      }
+      .startup pre {
+        background: #edf5f0;
+        padding: 18px;
+        border-radius: 8px;
+        overflow-x: auto;
+        font-size: 16px;
+        line-height: 1.7;
+      }
+      .startup a {
+        color: #13796b;
+      }
+      @media (max-width: 680px) {
+        .startup {
+          margin: 25px 14px;
+          padding: 23px;
+        }
+      }
+    </style>
   </head>
   <body>
-    <div id="app"></div>
+    <div id="app">
+      <main class="startup">
+        <h1 id="startup-title">Inicie o AOF Studio</h1>
+        <p id="startup-message">
+          Este sistema precisa do servidor Node.js para salvar cadastros e gerar
+          PDFs. Abrir o arquivo index.html diretamente não inicia o sistema.
+        </p>
+        <p>
+          Instale o
+          <a
+            href="https://nodejs.org/"
+            target="_blank"
+            rel="noopener noreferrer"
+            >Node.js 24 LTS</a
+          >. Depois, abra um terminal na pasta do projeto, onde está o arquivo
+          <strong>package.json</strong>, e execute:
+        </p>
+        <pre>
+npm ci
+npm start</pre>
+        <p>
+          Mantenha o terminal aberto e acesse
+          <a href="http://localhost:3000">http://localhost:3000</a> no
+          navegador.
+        </p>
+        <p>
+          Se você publicou em uma hospedagem, ela precisa executar o servidor
+          Node.js e manter o banco de dados. GitHub Pages e outros serviços
+          somente de arquivos estáticos não executam este sistema.
+        </p>
+        <noscript
+          ><p>
+            <strong
+              >O JavaScript está desativado. Ative-o no navegador para usar o
+              sistema.</strong
+            >
+          </p></noscript
+        >
+      </main>
+    </div>
     <div id="toast" role="status"></div>
     <dialog id="modal"></dialog>
-    <script src="/app.js" type="module"></script>
+    <script>
+      if (location.protocol !== "file:") {
+        document.getElementById("startup-title").textContent =
+          "Conectando ao AOF Studio…";
+        document.getElementById("startup-message").textContent =
+          "Se esta tela permanecer, confirme que o servidor está em execução seguindo os passos abaixo.";
+      }
+    </script>
+    <script src="./app.js" type="module"></script>
   </body>
 </html>
