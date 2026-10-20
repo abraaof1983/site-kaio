@@ -26,6 +26,25 @@ const defaultSettings = {
   quoteValidityDays: 15,
   clauses: initialClauses,
 };
+const historyEvent = (type, extra = {}) => ({
+  at: new Date().toISOString(),
+  type,
+  ...extra,
+});
+// Acrescenta um evento ao histórico do documento. Edições seguidas em até
+// 30 minutos viram um único registro, para o histórico não encher de "editado".
+function withEvent(doc, event) {
+  const history = Array.isArray(doc.history) ? [...doc.history] : [];
+  const last = history.at(-1);
+  if (
+    event.type === "edited" &&
+    last?.type === "edited" &&
+    Date.parse(event.at) - Date.parse(last.at) < 30 * 60000
+  )
+    history[history.length - 1] = event;
+  else history.push(event);
+  return history.slice(-100);
+}
 const stmt = (q, ...a) => db.prepare(q).run(...a);
 const get = (q, ...a) => db.prepare(q).get(...a);
 const put = (uid, kind, body) =>
@@ -286,7 +305,16 @@ app.post("/api/records/:kind", (req, res) => {
         : structuredClone(getQuoteTemplate(b.templateId))
       : null;
   }
+  if (kind === "documents" && existing && JSON.parse(existing.body).type !== b.type)
+    return res.status(400).json({ error: "O tipo do documento não pode ser alterado." });
   if (kind === "documents" && !existing) {
+    // Campos controlados pelo servidor não vêm do navegador em documentos novos.
+    const copiedFrom =
+      typeof b.copiedFrom === "string" && b.copiedFrom.length <= 40 ? b.copiedFrom : null;
+    for (const field of ["history", "sentAt", "archived", "archivedAt", "updatedAt", "sourceId", "copiedFrom"])
+      delete b[field];
+    b.history = [historyEvent("created", copiedFrom ? { copiedFrom } : {})];
+    b.updatedAt = new Date().toISOString();
     b.number = `${b.type === "contract" ? "CT" : "OR"}-${new Date().getFullYear()}-${randomBytes(3).toString("hex").toUpperCase()}`;
     b.company = {
       ...JSON.parse(
@@ -305,6 +333,19 @@ app.post("/api/records/:kind", (req, res) => {
     b.number = old.number;
     b.company = old.company;
     b.createdAt = old.createdAt;
+    // Vínculo, envio, arquivamento e histórico só mudam pelas rotas próprias.
+    delete b.copiedFrom;
+    for (const field of ["sourceId", "sentAt", "archived", "archivedAt"]) {
+      if (old[field] === undefined) delete b[field];
+      else b[field] = old[field];
+    }
+    b.history = withEvent(
+      old,
+      old.status !== b.status
+        ? historyEvent("status", { from: old.status, to: b.status })
+        : historyEvent("edited"),
+    );
+    b.updatedAt = new Date().toISOString();
   }
   if (existing)
     stmt(
@@ -339,6 +380,7 @@ app.post("/api/documents/:id/convert", (req, res) => {
     old.paymentNotes?.trim() === defaultPaymentNotes
       ? "Pagamento parcelado no cartão conforme a condição escolhida. Boleto: condições a combinar, com quitação até 10 dias antes do evento."
       : old.paymentNotes;
+  const now = new Date().toISOString();
   const b = {
     ...old,
     paymentNotes,
@@ -347,11 +389,102 @@ app.post("/api/documents/:id/convert", (req, res) => {
     status: "draft",
     sourceId: r.id,
     number: `CT-${new Date().getFullYear()}-${randomBytes(3).toString("hex").toUpperCase()}`,
-    createdAt: new Date().toISOString(),
+    createdAt: now,
+    updatedAt: now,
+    history: [historyEvent("created", { fromQuote: old.number })],
   };
-  delete b.id;
+  for (const field of ["id", "sentAt", "archived", "archivedAt"]) delete b[field];
   const id = put(req.uid, "documents", b);
+  old.history = withEvent(old, historyEvent("converted", { contractId: id, number: b.number }));
+  stmt(
+    "UPDATE records SET body=? WHERE id=? AND user_id=?",
+    JSON.stringify(old),
+    r.id,
+    req.uid,
+  );
   res.json({ ...b, id });
+});
+function findDocument(req) {
+  const r = get(
+    "SELECT * FROM records WHERE id=? AND user_id=? AND kind='documents'",
+    req.params.id,
+    req.uid,
+  );
+  return r ? { ...JSON.parse(r.body), id: r.id } : null;
+}
+function saveDocument(req, doc) {
+  const { id, ...body } = doc;
+  stmt(
+    "UPDATE records SET body=? WHERE id=? AND user_id=?",
+    JSON.stringify(body),
+    id,
+    req.uid,
+  );
+  return doc;
+}
+app.post("/api/documents/:id/archive", (req, res) => {
+  const doc = findDocument(req);
+  if (!doc) return res.sendStatus(404);
+  if (doc.archived) return res.json(doc);
+  doc.archived = true;
+  doc.archivedAt = new Date().toISOString();
+  doc.history = withEvent(doc, historyEvent("archived"));
+  res.json(saveDocument(req, doc));
+});
+app.post("/api/documents/:id/restore", (req, res) => {
+  const doc = findDocument(req);
+  if (!doc) return res.sendStatus(404);
+  if (!doc.archived) return res.json(doc);
+  delete doc.archived;
+  delete doc.archivedAt;
+  doc.history = withEvent(doc, historyEvent("restored"));
+  res.json(saveDocument(req, doc));
+});
+// Exclusão definitiva só para documentos arquivados: evita apagar algo ativo por engano.
+app.delete("/api/documents/:id", (req, res) => {
+  const doc = findDocument(req);
+  if (!doc) return res.sendStatus(404);
+  if (!doc.archived)
+    return res
+      .status(409)
+      .json({ error: "Arquive o documento antes de excluir definitivamente." });
+  stmt(
+    "DELETE FROM records WHERE id=? AND user_id=? AND kind='documents'",
+    doc.id,
+    req.uid,
+  );
+  res.json({ ok: true });
+});
+// Registra o envio (por exemplo, pelo WhatsApp). Rascunho passa a "Enviado".
+app.post("/api/documents/:id/sent", (req, res) => {
+  const doc = findDocument(req);
+  if (!doc) return res.sendStatus(404);
+  if (doc.archived || doc.status === "cancelled")
+    return res
+      .status(409)
+      .json({ error: "Documentos arquivados ou cancelados não podem ser enviados." });
+  const channel = ["whatsapp", "share"].includes(req.body?.channel)
+    ? req.body.channel
+    : "other";
+  const extra = doc.status === "draft" ? { from: "draft", to: "sent" } : {};
+  if (doc.status === "draft") doc.status = "sent";
+  doc.sentAt = new Date().toISOString();
+  doc.history = withEvent(doc, historyEvent("sent", { channel, ...extra }));
+  res.json(saveDocument(req, doc));
+});
+// Clientes e pacotes: os documentos guardam os dados da emissão, então excluir
+// o cadastro não altera documentos já emitidos.
+app.delete("/api/records/:kind/:id", (req, res) => {
+  if (!["clients", "packages"].includes(req.params.kind))
+    return res.sendStatus(404);
+  const result = stmt(
+    "DELETE FROM records WHERE id=? AND user_id=? AND kind=?",
+    req.params.id,
+    req.uid,
+    req.params.kind,
+  );
+  if (!result.changes) return res.sendStatus(404);
+  res.json({ ok: true });
 });
 const money = (n) =>
   Number(n || 0).toLocaleString("pt-BR", {
