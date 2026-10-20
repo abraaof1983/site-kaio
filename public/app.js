@@ -7,6 +7,7 @@ import {
   qtyLabel,
 } from "./catalog.js";
 import { QUOTE_TEMPLATES, dateBeforeEvent } from "./quote-templates.js";
+import { EVENT_TYPES, getEventType } from "./event-types.js";
 import {
   addDays,
   daysBetween,
@@ -1717,11 +1718,11 @@ function editDoc(type, d = {}, { notice = "", draftId } = {}) {
     offer.id === "complete"
       ? "À vista: parcela única na assinatura. Boleto: condições a combinar, com quitação até 10 dias antes do evento."
       : "Condições de pagamento a combinar.";
-  const templateDefaults = (t, offer) => ({
+  const templateDefaults = (t, offer, eventType) => ({
     templateId: t.id,
     offerId: offer.id,
-    quoteHeadline: t.headline,
-    introduction: t.introduction,
+    quoteHeadline: getEventType(eventType)?.headline || t.headline,
+    introduction: getEventType(eventType)?.introduction || t.introduction,
     venue: t.venue,
     packageId: "",
     packageName: offer.name,
@@ -1742,7 +1743,7 @@ function editDoc(type, d = {}, { notice = "", draftId } = {}) {
   });
   const data =
     template && isNew
-      ? { ...templateDefaults(template, initialOffer), ...d }
+      ? { ...templateDefaults(template, initialOffer, d.eventType), ...d }
       : { ...d };
   // Documento novo herda os itens do pacote de referência; documento antigo, que
   // só tem a lista em texto, mostra esse texto como itens soltos, sem perder nada.
@@ -1769,20 +1770,20 @@ function editDoc(type, d = {}, { notice = "", draftId } = {}) {
         false,
         {
           full: true,
-          hint: "Os modelos trazem marca, foto da estrutura, local e condições comerciais. Todos os valores continuam editáveis.",
+          hint: "Os modelos trazem marca, local e condições comerciais. O tipo de evento define a imagem. Todos os valores continuam editáveis.",
         },
       )}<div class="quote-template-fields" id="quote-template-fields"${template ? "" : " hidden"}>${select(
         "Opção de serviço do modelo",
         "offerId",
         (template?.offers || []).map((o) => [o.id, o.name]),
         data.offerId || initialOffer?.id,
-      )}${field("Título da proposta", "quoteHeadline", data.quoteHeadline || template?.headline)}${area(
+      )}</div>${field("Título da proposta", "quoteHeadline", data.quoteHeadline ?? getEventType(data.eventType)?.headline ?? template?.headline)}${area(
         "Apresentação",
         "introduction",
-        data.introduction,
+        data.introduction ?? getEventType(data.eventType)?.introduction,
         true,
         { hint: "Personalize com os nomes, a data e o local do evento." },
-      )}</div>`
+      )}`
     : "";
   const quotePriceFields = isQuote
     ? `<div class="quote-template-fields" id="quote-price-fields"${template ? "" : " hidden"}>${moneyField("Valor à vista", "cashTotal", data.cashTotal, true)}${moneyField(
@@ -1836,7 +1837,22 @@ function editDoc(type, d = {}, { notice = "", draftId } = {}) {
       ([v]) => type === "contract" || v !== "signed",
     ),
     d.status || "draft",
-  )}${field("Nome do evento", "event", data.event, "text", true)}${field("Data do evento", "date", data.date, "date", true)}${field(
+  )}${select(
+    "Tipo de evento",
+    "eventType",
+    [
+      ["", isNew ? "Selecione o tipo de evento" : "Não informado"],
+      ...EVENT_TYPES.map((event) => [event.id, event.label]),
+    ],
+    data.eventType || "",
+    isNew,
+    {
+      full: true,
+      hint: isQuote
+        ? "A imagem do orçamento acompanha o tipo escolhido. Serviços e valores permanecem editáveis."
+        : "Identifica a categoria deste evento.",
+    },
+  )}${isQuote ? '<figure class="event-image-preview field full" id="event-image-preview" hidden><img alt=""><figcaption><strong data-event-image-title></strong><span data-event-image-caption></span></figcaption></figure>' : ""}${field("Nome do evento", "event", data.event, "text", true)}${field("Data do evento", "date", data.date, "date", true)}${field(
     "Local / endereço do evento",
     "venue",
     data.venue,
@@ -1919,12 +1935,8 @@ function editDoc(type, d = {}, { notice = "", draftId } = {}) {
       ? {
           templateId: selectedTemplate?.id || null,
           offerId: selectedTemplate ? b.offerId || null : null,
-          quoteHeadline: selectedTemplate
-            ? b.quoteHeadline?.trim() || null
-            : null,
-          introduction: selectedTemplate
-            ? b.introduction?.trim() || null
-            : null,
+          quoteHeadline: b.quoteHeadline?.trim() || null,
+          introduction: b.introduction?.trim() || null,
           cashTotal: selectedTemplate ? optionalMoney(b.cashTotal) : null,
           installmentTotal: selectedTemplate
             ? optionalMoney(b.installmentTotal)
@@ -1966,6 +1978,7 @@ function editDoc(type, d = {}, { notice = "", draftId } = {}) {
       ...sheetValues,
       id: d.id,
       type,
+      eventType: b.eventType || null,
       client: { ...client },
       total: total ?? 0,
       extraHour: optionalMoney(b.extraHour) ?? 0,
@@ -2148,6 +2161,41 @@ function editDoc(type, d = {}, { notice = "", draftId } = {}) {
         .map((o) => `<option value="${esc(o.id)}">${esc(o.name)}</option>`)
         .join("");
   };
+  const updateEventPreview = () => {
+    if (!isQuote) return;
+    const selectedEvent = getEventType(input("eventType").value);
+    const preview = $("#event-image-preview", form);
+    preview.hidden = !selectedEvent;
+    if (!selectedEvent) return;
+    const image = $("img", preview);
+    image.src = `/${selectedEvent.imagePath.replace(/^public\//, "")}`;
+    image.alt = `Imagem ilustrativa para ${selectedEvent.label.toLowerCase()}`;
+    $("[data-event-image-title]", preview).textContent = selectedEvent.label;
+    $("[data-event-image-caption]", preview).textContent =
+      selectedEvent.imageCaption;
+  };
+  // Apenas textos sugeridos acompanham a troca de categoria ou modelo.
+  // Uma apresentação personalizada pelo usuário continua intacta.
+  const applyPresentation = (suggestion) => {
+    if (!isQuote || !suggestion) return;
+    for (const [field, property] of [
+      ["quoteHeadline", "headline"],
+      ["introduction", "introduction"],
+    ]) {
+      const current = input(field).value.trim();
+      const standard = [...EVENT_TYPES, ...templates].some(
+        (item) => item[property] === current,
+      );
+      if (!current || standard) setValue(field, suggestion[property]);
+    }
+  };
+  input("eventType").onchange = () => {
+    updateEventPreview();
+    applyPresentation(
+      getEventType(input("eventType").value) ||
+        templates.find((t) => t.id === input("templateId")?.value),
+    );
+  };
   let updatePrice = updatePaymentSum;
   if (isQuote) {
     const intValue = (name) =>
@@ -2197,9 +2245,12 @@ function editDoc(type, d = {}, { notice = "", draftId } = {}) {
       items.fill([]);
       if (selected) {
         for (const [name, value] of Object.entries(
-          templateDefaults(selected, selected.offers[0]),
-        ))
-          setValue(name, value);
+          templateDefaults(selected, selected.offers[0], input("eventType").value),
+        )) {
+          if (name !== "quoteHeadline" && name !== "introduction")
+            setValue(name, value);
+        }
+        applyPresentation(getEventType(input("eventType").value) || selected);
       }
       updatePrice();
     };
@@ -2259,10 +2310,12 @@ function editDoc(type, d = {}, { notice = "", draftId } = {}) {
     )
       sheet.open = true;
     combo.syncLabel();
+    updateEventPreview();
     updatePrice();
   };
 
   for (const payment of data.payments || []) addPayment(payment);
+  updateEventPreview();
   updatePrice();
   ctrl.markPristine();
   ctrl.offerDraft(fillForm);
@@ -2479,6 +2532,7 @@ function docDetail(d) {
   const event = panel(
     "Evento",
     dl([
+      ["Tipo de evento", esc(getEventType(d.eventType)?.label || "")],
       ["Data", date(d.date)],
       ["Local", esc(d.venue || "A definir")],
       ["Convidados", esc(d.guests || "")],

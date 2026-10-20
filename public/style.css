@@ -891,6 +891,32 @@ textarea:disabled {
 .quote-template-fields[hidden] {
   display: none;
 }
+.event-image-preview {
+  margin: 0;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-2);
+}
+.event-image-preview[hidden] {
+  display: none;
+}
+.event-image-preview img {
+  display: block;
+  width: 100%;
+  height: 150px;
+  object-fit: cover;
+}
+.event-image-preview figcaption {
+  display: grid;
+  gap: 4px;
+  padding: 11px 14px;
+  font-size: var(--fs-sm);
+}
+.event-image-preview figcaption span {
+  color: var(--text-muted);
+  font-size: var(--fs-xs);
+}
 .payment-head,
 .payment-row {
   display: grid;

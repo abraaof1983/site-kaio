@@ -1,5 +1,6 @@
 import { tryAsset } from "./app-env.js";
 import { logoBuffer } from "./branding.js";
+import { getEventType } from "./public/event-types.js";
 import { CATEGORY_BANDS, categoryTitle, qtyLabel } from "./public/catalog.js";
 
 // Contrato no formato do modelo da AOF: moldura e cabeçalho com logos em todas as
@@ -537,6 +538,12 @@ export function renderContractPdf(doc, b, company = {}) {
       { w: 0.27, text: b.contact2 },
       { w: 0.375, text: client.email },
     ]);
+    const eventType = getEventType(b.eventType);
+    if (eventType)
+      row([
+        { w: 0.2, label: "Tipo de evento" },
+        { w: 0.8, text: eventType.label },
+      ]);
     row([
       { w: L, label: "Local" },
       { w: MID, text: b.venue },

@@ -1,6 +1,7 @@
 import { tryAsset } from "./app-env.js";
 import { logoBuffer } from "./branding.js";
 import { dateBeforeEvent, getQuoteTemplate } from "./public/quote-templates.js";
+import { getEventType } from "./public/event-types.js";
 
 const colors = {
   background: "#101719",
@@ -38,6 +39,9 @@ export function renderQuotePdf(doc, b, company, template = null) {
   // Only an explicitly supplied snapshot enables a model. In particular, old
   // quotes must not acquire today's catalogue prices when downloaded again.
   const model = template;
+  // Only an explicit event type selects new artwork; existing documents keep
+  // their original presentation until the user chooses a category.
+  const eventType = getEventType(b.eventType);
   const catalogue = model ? getQuoteTemplate(model.id || b.templateId) : null;
   const offers = Array.isArray(model?.offers) ? model.offers : [];
   const selected = offers.find((offer) => offer.id === b.offerId) || offers[0];
@@ -514,11 +518,10 @@ export function renderQuotePdf(doc, b, company, template = null) {
   }
 
   paint();
-  text(b.quoteHeadline || model?.headline || "Proposta comercial", {
-    size: 25,
-    bold: true,
-    gap: 11,
-  });
+  text(
+    b.quoteHeadline || eventType?.headline || model?.headline || "Proposta comercial",
+    { size: 25, bold: true, gap: 11 },
+  );
 
   const venue = b.venue || model?.venue || "Local a definir";
   const dateWidth = 125;
@@ -536,6 +539,12 @@ export function renderQuotePdf(doc, b, company, template = null) {
   });
   if (b.event)
     text(`Evento: ${b.event}`, { size: 8, color: colors.muted, gap: 3 });
+  if (eventType)
+    text(`Tipo de evento: ${eventType.label}`, {
+      size: 8,
+      color: colors.muted,
+      gap: 3,
+    });
   contactDetails();
   const schedule = [
     b.guests && `${b.guests} convidados`,
@@ -547,15 +556,21 @@ export function renderQuotePdf(doc, b, company, template = null) {
     .filter(Boolean)
     .join("  •  ");
   if (schedule) text(schedule, { size: 7.5, color: colors.muted, gap: 3 });
-  const introduction = b.introduction ?? model?.introduction;
+  const introduction =
+    b.introduction ?? eventType?.introduction ?? model?.introduction;
   if (introduction)
     text(introduction, { size: 8.5, color: colors.muted, gap: 9 });
 
-  const hero = model ? tryAsset("public/quote-assets/estrutura.png") : null;
+  const hero = eventType
+    ? tryAsset(eventType.imagePath)
+    : model
+      ? tryAsset("public/quote-assets/estrutura.png")
+      : null;
   if (hero) {
     const imageHeight = 165;
     const caption = wrap(
-      model.imageCaption ||
+      eventType?.imageCaption ||
+        model?.imageCaption ||
         catalogue?.imageCaption ||
         "Imagem ilustrativa da estrutura.",
       width,

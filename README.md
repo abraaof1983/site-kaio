@@ -107,7 +107,7 @@ Os checksums oficiais são publicados em [SHASUMS256.txt](https://nodejs.org/dis
 
 1. Cadastre sua conta e revise os dados da empresa em **Configurações**.
 2. Cadastre clientes e pacotes com equipamentos e preços.
-3. Em **Novo orçamento**, escolha um modelo pronto ou comece em branco e preencha evento, horários, validade e parcelas. A validade sugerida é de 15 dias, ajustável em **Configurações**; depois dessa data, o orçamento aparece como **Vencido**.
+3. Em **Novo orçamento**, escolha um modelo pronto ou comece em branco, selecione o **Tipo de evento** e preencha evento, horários, validade e parcelas. A validade sugerida é de 15 dias, ajustável em **Configurações**; depois dessa data, o orçamento aparece como **Vencido**.
 4. Baixe o PDF ou gere o contrato. O contrato gerado abre para revisão, e o orçamento passa a aparecer como **Convertido**, com o atalho **Ver contrato**.
 5. Revise as cláusulas, autorização de imagem e condições, e emita o PDF do contrato.
 
@@ -193,6 +193,14 @@ O ícone do aplicativo é o arquivo `.ico` fornecido para o AOF Studio. Os logos
 São aceitos PNG, JPG e ICO de até 5 MB na interface. A imagem é ajustada no próprio navegador para até 512 pixels, preservando a proporção e a transparência; o formato armazenado é PNG/JPEG, limitado a 256 KB. O servidor valida novamente tipo, tamanho e dimensões antes de salvar.
 
 O logo fica no banco local com as configurações da conta e é copiado para os novos documentos. Alterar ou remover o logo não modifica documentos emitidos: cada um conserva a identidade salva na criação. Um contrato gerado de um orçamento mantém essa identidade. O ícone do sistema e os logos não exigem serviços externos.
+
+## Tipos de evento
+
+O campo **Tipo de evento** oferece **Casamento**, **Debutantes**, **Aniversário** e **Formatura**. Cada categoria tem uma imagem ilustrativa própria, mostrada no formulário e impressa no PDF, tanto nos modelos prontos quanto em orçamentos personalizados. As imagens ficam incluídas no sistema e funcionam sem internet.
+
+O título e a apresentação sugeridos acompanham a categoria. Textos personalizados são preservados ao trocar o tipo ou o modelo. A escolha não modifica os serviços e valores; o tipo fica salvo no documento e acompanha a conversão em contrato.
+
+Documentos anteriores continuam sem classificação e preservam a apresentação antiga até que você escolha um tipo ao editar. Novos documentos pedem a seleção do tipo de evento.
 
 ## Validação da versão Windows
 

@@ -22,6 +22,7 @@ import {
 } from "./desktop-window.js";
 import { CATEGORY_IDS, equipmentText } from "./public/catalog.js";
 import { QUOTE_TEMPLATES, getQuoteTemplate } from "./public/quote-templates.js";
+import { EVENT_TYPES, getEventType } from "./public/event-types.js";
 import { renderQuotePdf } from "./quote-pdf.js";
 import { renderContractPdf } from "./contract-pdf.js";
 const app = express();
@@ -291,6 +292,7 @@ app.get("/api/data", (req, res) => {
     documents: [],
     settings: defaultSettings,
     quoteTemplates: QUOTE_TEMPLATES,
+    eventTypes: EVENT_TYPES,
   };
   for (const r of db
     .prepare("SELECT * FROM records WHERE user_id=? ORDER BY id DESC")
@@ -352,6 +354,8 @@ function validate(kind, b) {
   )
     return "Informe uma validade padrão entre 1 e 365 dias.";
   if (kind === "documents") {
+    if (b.eventType != null && b.eventType !== "" && !getEventType(b.eventType))
+      return "Selecione um tipo de evento válido.";
     if (
       !b.client?.name ||
       !b.event ||
@@ -437,6 +441,13 @@ app.post("/api/records/:kind", (req, res) => {
       kind,
     );
   if (b.id && !existing) return res.sendStatus(404);
+  if (kind === "documents") {
+    // Clientes antigos da API não devem apagar o tipo ao editar outro campo.
+    // Documentos anteriores ao menu continuam sem classificação automática.
+    if (b.eventType === undefined && existing)
+      b.eventType = JSON.parse(existing.body).eventType ?? null;
+    else b.eventType = b.eventType || null;
+  }
   if (kind === "settings") {
     const previous = existing ? JSON.parse(existing.body) : {};
     for (const field of LOGO_FIELDS) {

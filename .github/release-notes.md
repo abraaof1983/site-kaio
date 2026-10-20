@@ -13,6 +13,13 @@ O aplicativo abre uma janela própria do Edge ou Chrome, **sem CMD visível**. O
 - Aceita PNG, JPG e ICO, com prévia, transparência e restauração do padrão.
 - Cada conta guarda seus próprios logos; os documentos já emitidos preservam a identidade salva.
 
+## Tipos de evento
+
+- Menu com Casamento, Debutantes, Aniversário e Formatura.
+- Imagem ilustrativa diferente para cada categoria, disponível sem internet nos orçamentos personalizados e nos modelos prontos.
+- Prévia da imagem no formulário, com sugestões de título e apresentação que preservam textos personalizados.
+- O tipo fica salvo e acompanha a conversão em contrato. Documentos antigos continuam com a apresentação anterior até a escolha de uma categoria.
+
 ## Correções
 
 - Ações de editar, gerar PDF, converter e organizar documentos voltam a executar corretamente.

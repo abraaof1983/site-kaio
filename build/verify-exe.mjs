@@ -571,6 +571,21 @@ try {
     quotePdf.length > 150000,
     kb(quotePdf.length),
   );
+  check("quatro tipos de evento embarcados", data.eventTypes?.length === 4);
+  for (const eventType of data.eventTypes) {
+    const typed = await api("/records/documents", {
+      ...quote,
+      eventType: eventType.id,
+    });
+    const pdf = await api(`/documents/${typed.id}/pdf`);
+    check(
+      `PDF de ${eventType.label} usa a imagem do executável`,
+      typed.eventType === eventType.id &&
+        pdf.subarray(0, 5).toString() === "%PDF-" &&
+        pdf.length > 150000,
+      kb(pdf.length),
+    );
+  }
 
   const page = async (path, headers = {}) => {
     const r = await fetch(`${base}${path}`, {
@@ -598,12 +613,17 @@ try {
     ["/routes.js", "javascript"],
     ["/documents.js", "javascript"],
     ["/quote-templates.js", "javascript"],
+    ["/event-types.js", "javascript"],
     ["/catalog.js", "javascript"],
     ["/desktop-session.js", "javascript"],
     ["/aof-studio.ico", "image/x-icon"],
     ["/quote-assets/logo-contrato.jpg", "image/jpeg"],
     ["/quote-assets/logo-aof.jpg", "image/jpeg"],
     ["/quote-assets/estrutura.png", "image/png"],
+    ...data.eventTypes.map((eventType) => [
+      `/${eventType.imagePath.replace(/^public\//, "")}`,
+      "image/jpeg",
+    ]),
   ]) {
     const r = await page(path);
     check(
