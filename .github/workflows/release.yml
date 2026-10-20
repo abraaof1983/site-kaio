@@ -1,0 +1,80 @@
+name: Release do Windows
+
+# Publica o executável instalável como anexo de release, em vez de versionar o
+# binário: ele tem ~97 MB e o GitHub bloqueia arquivos acima de 100 MiB no
+# histórico. Anexo de release fica fora do histórico do git.
+#
+# Para publicar, envie uma tag com a mesma versão do package.json:
+#   git tag v1.1.0 && git push origin v1.1.0
+# Para só compilar e conferir, sem publicar: aba Actions > Run workflow.
+
+on:
+  push:
+    tags:
+      - "v*"
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  windows:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "24"
+          cache: npm
+
+      - name: Instala as dependências
+        run: npm ci
+
+      - name: Confere se a tag combina com a versão do projeto
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          $pkg = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $tag = $env:TAG.TrimStart('v')
+          if ($pkg -ne $tag) {
+            throw "A tag $tag nao corresponde a versao $pkg do package.json. Atualize um dos dois."
+          }
+          Write-Host "versao conferida: $pkg"
+
+      - name: Testes
+        run: npm test
+
+      - name: Compila o executável
+        run: npm run build:exe
+
+      - name: Confere o executável compilado
+        run: npm run verify:exe
+
+      - name: Guarda os arquivos da compilação
+        uses: actions/upload-artifact@v4
+        with:
+          name: aof-studio-windows
+          path: |
+            dist/*.zip
+            dist/AOF Studio/AOF Studio.exe
+          retention-days: 14
+
+      - name: Publica o release
+        if: startsWith(github.ref, 'refs/tags/')
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+        run: |
+          $version = (Get-Content package.json -Raw | ConvertFrom-Json).version
+          $zip = "dist/AOF-Studio-$version-windows.zip"
+          $exe = "dist/AOF Studio/AOF Studio.exe"
+          foreach ($file in @($zip, $exe)) {
+            if (-not (Test-Path -LiteralPath $file)) { throw "Nao encontrei $file" }
+          }
+          $notes = (Get-Content .github/release-notes.md -Raw).Replace('__VERSAO__', $version)
+          $notes | Set-Content release-notes.md -Encoding utf8
+          gh release create $env:TAG --title "AOF Studio $version" --notes-file release-notes.md $zip $exe
