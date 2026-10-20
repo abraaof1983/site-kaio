@@ -2412,7 +2412,7 @@ function bindClientCombo(ctrl, snapshot) {
   const choose = (option) => {
     close();
     if (option.create) create(box.value.trim());
-    else select(option);
+    else select({ id: option.id, name: option.label });
   };
   box.addEventListener("input", () => {
     if (box.value !== labelFor(hidden.value)) hidden.value = "";
