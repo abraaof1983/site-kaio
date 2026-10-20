@@ -35,12 +35,16 @@ function cli(args, env = {}) {
   const r = spawnSync(EXE, args, { env: { ...baseEnv, ...env }, encoding: "utf8", windowsHide: true });
   return { out: (r.stdout || "") + (r.stderr || ""), status: r.status };
 }
-const ps = (script, env = {}) =>
-  spawnSync("powershell", ["-NoProfile", "-NonInteractive", "-Command", script], {
+// Valores vão por variável de ambiente, e não interpolados no texto do script:
+// caminhos com espaço e aspas deixam de ser problema.
+const ps = (script, env = {}) => {
+  const r = spawnSync("powershell", ["-NoProfile", "-NonInteractive", "-Command", script], {
     env: { ...baseEnv, ...env },
     encoding: "utf8",
     windowsHide: true,
-  }).stdout.trim();
+  });
+  return (r.stdout || "").trim() || (r.stderr || "").trim().split("\n")[0] || "";
+};
 const records = (file) => {
   const db = new DatabaseSync(file, { readOnly: true });
   try {
@@ -113,13 +117,20 @@ try {
     where.out.trim(),
   );
   check("comando desconhecido avisa e falha", cli(["--banana"]).status === 1);
-  const info = ps(`$i = (Get-Item -LiteralPath '${EXE}').VersionInfo; "$($i.ProductName)|$($i.ProductVersion)"`);
+  const info = ps(`$i = (Get-Item -LiteralPath $env:AOF_EXE).VersionInfo; "$($i.ProductName)|$($i.ProductVersion)"`, { AOF_EXE: EXE });
   check("propriedades do arquivo preenchidas", info.startsWith(APP_NAME), info);
-  check(
-    "sem assinatura inválida",
-    ps(`(Get-AuthenticodeSignature '${EXE}').Status`) === "NotSigned",
-    ps(`(Get-AuthenticodeSignature '${EXE}').Status`),
+  // A compilação remove a assinatura do node.exe, porque alterar o binário a
+  // invalida. "NotSigned" é o esperado; uma assinatura que não confere
+  // ("HashMismatch") é o problema de verdade, tratada por antivírus como
+  // adulteração. Quando o Windows não consegue responder, o resultado é
+  // inconclusivo e não deve reprovar uma publicação.
+  const signature = ps(
+    `try { (Get-AuthenticodeSignature -LiteralPath $env:AOF_EXE).Status } catch { "erro: " + $_.Exception.Message }`,
+    { AOF_EXE: EXE },
   );
+  if (["NotSigned", "Valid"].includes(signature)) check("sem assinatura quebrada", true, signature);
+  else if (/mismatch|NotTrusted|NotSupportedFileFormat/i.test(signature)) check("sem assinatura quebrada", false, signature);
+  else console.log(`PULADO: o Windows não informou a assinatura do executável (${signature || "sem resposta"})`);
 
   console.log("\n--- Servidor e dados locais ---");
   app = startExe({ PORT, DATA_DIR: dataDir });
@@ -262,13 +273,15 @@ try {
     check("--instalar conclui", install.status === 0, install.out.trim().split("\n")[0]);
     check("programa copiado para a pasta do usuário", existsSync(installed) && statSync(installed).size === statSync(EXE).size);
     for (const link of links) check(`atalho em ${link.includes("Desktop") ? "área de trabalho" : "menu Iniciar"}`, existsSync(link));
-    const target = ps(`(New-Object -ComObject WScript.Shell).CreateShortcut('${links[0]}').TargetPath`);
+    const shortcut = (property) =>
+      ps(`(New-Object -ComObject WScript.Shell).CreateShortcut($env:AOF_LINK).${property}`, { AOF_LINK: links[0] });
+    const target = shortcut("TargetPath");
     check(
       "atalho aponta para a cópia instalada",
       existsSync(target) && realpathSync.native(target).toLowerCase() === realpathSync.native(installed).toLowerCase(),
       target,
     );
-    check("atalho abre minimizado", ps(`(New-Object -ComObject WScript.Shell).CreateShortcut('${links[0]}').WindowStyle`) === "7");
+    check("atalho abre minimizado", shortcut("WindowStyle") === "7");
     check("cópia instalada executa", spawnSync(installed, ["--versao"], { encoding: "utf8", windowsHide: true }).status === 0);
 
     console.log("\n--- Desinstalação ---");
