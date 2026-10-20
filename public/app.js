@@ -1079,6 +1079,21 @@ function editPackage(p = {}) {
   );
 }
 // Sem clientes cadastrados, o próprio campo Cliente oferece o cadastro (sem sair do formulário).
+// Ficha do evento no PDF do contrato (formato do modelo da AOF). Todos opcionais.
+const CONTRACT_SHEET_FIELDS = [
+  ["referral", "Indicação", { hint: "Como o cliente chegou: Instagram, indicação de alguém…" }],
+  ["contact2", "Segundo contato", { hint: "Ex.: (47) 99999-9999 - Noivo" }],
+  ["reception", "Recepção", { full: true, hint: "Local, horário e endereço da recepção." }],
+  ["ceremonyPlace", "Local da cerimônia"],
+  ["officiant", "Celebrante"],
+  ["venueManager", "Gerente do espaço"],
+  ["planner", "Cerimonial"],
+  ["bartender", "Bartender"],
+  ["decoration", "Decoração"],
+  ["photo", "Foto"],
+  ["video", "Vídeo"],
+  ["sweets", "Doces"],
+];
 function editDoc(type, d = {}, { notice = "", draftId } = {}) {
   const isQuote = type === "quote",
     isNew = !d.id,
@@ -1163,6 +1178,13 @@ function editDoc(type, d = {}, { notice = "", draftId } = {}) {
       )}${area("Condições do cartão (editáveis)", "cardTerms", data.cardTerms)}<p class="helper full" id="quote-payment-helper"></p></div>`
     : "";
   const paymentsBlock = `<div class="field full payments" id="payments-field"><span class="label" id="payments-label">Vencimentos do pagamento <span class="optional">(opcional)</span></span><p class="hint" id="payments-hint">Registre pagamentos já combinados. A soma precisa ser igual ao total do documento.${isQuote ? " Nas condições de cartão dos modelos, os vencimentos não são obrigatórios." : ""}</p><div class="payment-head" id="payment-head" aria-hidden="true" hidden><span>Vencimento</span><span>Valor</span></div><div id="payments" role="group" aria-labelledby="payments-label" aria-describedby="payments-hint payment-sum"></div><p class="payment-sum" id="payment-sum"></p><div class="payment-actions"><button type="button" id="addpayment"><span aria-hidden="true">＋</span> Adicionar parcela</button><button type="button" id="splitpayments" hidden>Distribuir o total igualmente</button></div></div>`;
+  // Recolhida quando vazia, para não alongar o formulário de quem não usa.
+  const sheetFields =
+    type === "contract"
+      ? `<div class="field full"><details class="more-fields" id="more-fields"${CONTRACT_SHEET_FIELDS.some(([name]) => data[name]) ? " open" : ""}><summary>Ficha do evento no contrato <span class="optional">(opcional)</span></summary><p class="hint">Indicação, recepção, cerimônia e equipe do evento aparecem na tabela do contrato. O que ficar vazio sai em branco no PDF.</p><div class="form-grid">${CONTRACT_SHEET_FIELDS.map(([name, label, opts = {}]) =>
+          field(label, name, data[name] ?? "", "text", false, Boolean(opts.full), { attrs: 'autocomplete="off"', hint: opts.hint || "" }),
+        ).join("")}</div></details></div>`
+      : "";
   const html = `${quoteFields}${section(`${num(1)} · Cliente e evento`)}${clientCombo(selectedClientId, d.client)}${select(
     "Situação",
     "status",
@@ -1182,7 +1204,7 @@ function editDoc(type, d = {}, { notice = "", draftId } = {}) {
     "start",
     data.start,
     "time",
-  )}${field("Término", "end", data.end, "time", false, false, { hint: "Pode ser no dia seguinte." })}${section(
+  )}${field("Término", "end", data.end, "time", false, false, { hint: "Pode ser no dia seguinte." })}${sheetFields}${section(
     `${num(2)} · Serviços e valores`,
   )}${select(
     "Pacote de referência",
@@ -1252,12 +1274,17 @@ function editDoc(type, d = {}, { notice = "", draftId } = {}) {
         quoteValues.paymentChoice === "installments" ? quoteValues.installmentTotal : quoteValues.cashTotal;
       if (total == null) throw Error("Informe o valor da condição de pagamento escolhida.");
     }
+    const sheetValues =
+      type === "contract"
+        ? Object.fromEntries(CONTRACT_SHEET_FIELDS.map(([name]) => [name, String(b[name] ?? "").trim()]))
+        : {};
     // Parte do documento original para não perder campos que não estão no formulário
     // (por exemplo, o vínculo do contrato com o orçamento de origem).
     return api("/records/documents", {
       ...d,
       ...b,
       ...quoteValues,
+      ...sheetValues,
       id: d.id,
       type,
       client: { ...client },
@@ -1481,6 +1508,8 @@ function editDoc(type, d = {}, { notice = "", draftId } = {}) {
     }
     paymentList.innerHTML = "";
     for (const [dateValue, amount] of values.__payments || []) addPayment({ date: dateValue, amount });
+    const sheet = $("#more-fields", form);
+    if (sheet && CONTRACT_SHEET_FIELDS.some(([name]) => input(name)?.value.trim())) sheet.open = true;
     combo.syncLabel();
     updatePrice();
   };
@@ -1672,6 +1701,7 @@ function docDetail(d) {
       ["Cerimônia", esc(d.ceremony || "")],
       ["Início", esc(d.start || "")],
       ["Término", esc(d.end || "")],
+      ...(isQuote ? [] : CONTRACT_SHEET_FIELDS.map(([name, label]) => [label, esc(d[name] || "")])),
     ]),
   );
   const who = panel(
@@ -1840,6 +1870,8 @@ function duplicateDoc(id) {
   const copy = { ...d, status: "draft", copiedFrom: d.number };
   for (const key of ["id", "number", "company", "createdAt", "updatedAt", "history", "sentAt", "archived", "archivedAt", "sourceId", "quoteTemplate", "client", "clientId", "date", "event", "guests", "payments"])
     delete copy[key];
+  // A ficha (indicação, recepção, equipe) é do evento copiado: começa em branco.
+  for (const [key] of CONTRACT_SHEET_FIELDS) delete copy[key];
   if (d.type === "quote") copy.validUntil = addDays(today(), validityDays());
   editDoc(d.type, copy, {
     notice: `Cópia de <strong>${esc(d.number)}</strong>. Escolha o cliente e informe o evento e a data.`,

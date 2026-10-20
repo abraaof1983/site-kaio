@@ -339,6 +339,19 @@ Medições depois da Fase 1, com as mesmas telas e dados fictícios (60 verifica
 
 Continua para a Fase 2: o tamanho do formulário de orçamento (3,5 telas; item 2.1).
 
+### Contrato no formato do modelo da AOF · implementado
+
+Resolve G5 e parte de 2.9. O PDF do contrato (`contract-pdf.js`) segue o contrato modelo da empresa:
+
+- Moldura e cabeçalho em todas as páginas: logos AOF e Kaio Jansen em preto sobre branco, título, data com dia da semana, número do contrato, evento e indicação.
+- Ficha do evento em tabela: nome e CPF/CNPJ, endereço e CEP, contatos, local e convidados, horários (montagem, cerimônia, festa e final), recepção, cerimônia e celebrante, gerente, bartender, decoração, cerimonial, foto, vídeo e doces. As linhas aparecem mesmo vazias, como no modelo.
+- Pacote contratado, programação financeira e hora adicional em quadro logo abaixo da ficha.
+- Cláusulas justificadas, com número sublinhado e título em negrito. Uma linha numerada com título em maiúsculas abre cláusula nova, mesmo sem linha em branco antes.
+- Equipamentos em quadro por categoria (som da festa, DJ, iluminação, som da cerimônia, mídia e cênicas), com quantidade em coluna própria. Uma linha terminada em ":" cria uma categoria; o que não se encaixa vai para "Outros itens".
+- Observações em tópicos, cidade e data, espaço para o selo da assinatura digital (gov.br) e rodapé com empresa, contato e "Página 1 de 2".
+
+O formulário do contrato ganhou a seção recolhida "Ficha do evento no contrato" (12 campos opcionais), que abre sozinha quando já tem dados. Os campos preenchidos aparecem no painel Evento da tela do contrato, e "Duplicar" começa com a ficha em branco. Verificado no navegador: 20 de 20 verificações (ficha recolhida, teclado, rótulos, salvamento, painel e PDF pela rota do servidor).
+
 ## Fontes
 
 - [Nielsen Norman Group: 10 heurísticas de usabilidade](https://www.nngroup.com/articles/ten-usability-heuristics/)
