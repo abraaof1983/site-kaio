@@ -339,6 +339,21 @@ Medições depois da Fase 1, com as mesmas telas e dados fictícios (60 verifica
 
 Continua para a Fase 2: o tamanho do formulário de orçamento (3,5 telas; item 2.1).
 
+### Catálogo de produtos · implementado
+
+Atende o item 2.2 (catálogo único) em parte e corrige um problema de confiabilidade no contrato.
+
+Antes, a lista de equipamentos era texto solto e o PDF adivinhava a coluna do quadro pelo nome do item, por expressão regular. Isso erra em casos comuns: "Luz âmbar para as mesas" é iluminação decorativa, mas o palpite só vê "luz" e manda para a pista de dança.
+
+- Novo cadastro **Produtos**, agrupado pelos mesmos quadros do contrato. Cada produto define onde é impresso.
+- Pacotes passam a ser montados escolhendo produtos e quantidades. O preço do pacote continua manual, com a soma dos valores de referência ao lado, porque o pacote normalmente é vendido com desconto sobre a soma.
+- Orçamento e contrato herdam os itens do pacote e permitem ajustar para aquele evento: é o caminho para acrescentar cênicas ou som de cerimônia a um contrato específico.
+- O item é gravado no documento com nome e quadro: editar ou excluir o produto depois não muda documento já emitido.
+- `public/catalog.js` é compartilhado entre navegador e PDF, para a categoria escolhida no cadastro ser exatamente a coluna impressa.
+- Compatibilidade: documento sem itens continua usando o texto e o palpite por nome. O texto existente aparece no campo **Outros itens**, sem perda.
+
+Verificado: 29 verificações do modelo e do PDF (agrupamento, helpers, recusas do servidor, contrato com cênicas no quadro certo, documento antigo sem itens) e 29 verificações da interface em navegador real (tela de produtos, cadastro, pacote montado por produtos, item acrescentado ao contrato, resumo agrupado na tela do documento). Conferido também no PDF, página por página.
+
 ### Instalação local no Windows · implementada
 
 Muda o modo de entrega: em vez de pedir Node.js, terminal e `npm`, o sistema passa a ser um programa instalável no computador de quem usa. Resolve H1: a abertura não depende mais de `npm ci`, de Internet nem da pasta do projeto.

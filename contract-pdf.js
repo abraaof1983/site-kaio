@@ -1,4 +1,5 @@
 import { tryAsset } from "./app-env.js";
+import { CATEGORY_BANDS, categoryTitle, qtyLabel } from "./public/catalog.js";
 
 // Contrato no formato do modelo da AOF: moldura e cabeçalho com logos em todas as
 // páginas, ficha do evento em tabela, cláusulas numeradas, pacote e programação
@@ -51,24 +52,28 @@ export function cityOf(address) {
   return text.match(/([A-Za-zÀ-ú][A-Za-zÀ-ú ]+?)\s*\/\s*[A-Z]{2}\b/)?.[1].trim() || "";
 }
 
-// Categorias do quadro de equipamentos do modelo. A ordem dos testes importa:
+// Palpite de categoria pelo nome do item. Vale somente para texto solto: linhas
+// digitadas à mão e documentos antigos, de antes do cadastro de produtos. Produto
+// cadastrado já traz a categoria escolhida, sem adivinhação. A ordem importa:
 // "caixa de som da cerimônia" vai para cerimônia, e não para som da festa.
-const GROUPS = [
-  { id: "ceremony", title: "EQUIPAMENTOS DE SOM CERIMÔNIA", test: /cerimonia|mesa de som/ },
-  { id: "media", title: "KIT MÍDIA FOTOS E VÍDEOS", test: /foto|video|telao|projetor|camera/ },
-  { id: "scenic", title: "CÊNICAS – ILUMINAÇÃO DECORATIVA", test: /cenic|decorativ|uplight|luminaria/ },
-  { id: "light", title: "ILUMINAÇÃO E EFEITOS PARA DANÇA", test: /moving|beam|fumaca|laser|strobo|\bled\b|refletor|\bpar\b|trelica|ilumina|\bluz|efeito|faisca/ },
-  { id: "dj", title: "EQUIPAMENTOS DJ FESTA", test: /notebook|macbook|controladora|mixer|cdj|toca.?disco|\bfone|\bdj\b/ },
-  { id: "sound", title: "EQUIPAMENTOS DE SOM “FESTA”", test: /caixa|grave|\bsub|microfone|\bmic\b|amplificador|\bsom\b/ },
+const GUESSES = [
+  { id: "ceremony", test: /cerimonia|mesa de som/ },
+  { id: "media", test: /foto|video|telao|projetor|camera/ },
+  { id: "scenic", test: /cenic|decorativ|uplight|luminaria/ },
+  { id: "light", test: /moving|beam|fumaca|laser|strobo|\bled\b|refletor|\bpar\b|trelica|ilumina|\bluz|efeito|faisca/ },
+  { id: "dj", test: /notebook|macbook|controladora|mixer|cdj|toca.?disco|\bfone|\bdj\b/ },
+  { id: "sound", test: /caixa|grave|\bsub|microfone|\bmic\b|amplificador|\bsom\b/ },
 ];
-const BANDS = [
-  ["sound", "dj", "light"],
-  ["ceremony", "media", "scenic"],
-];
+// As seis colunas do quadro, na ordem do modelo. "other" fica fora: sai em faixa
+// própria de largura inteira, como "OUTROS ITENS".
+const BANDED = CATEGORY_BANDS.flat();
+const OTHERS_TITLE = categoryTitle("other");
+const emptyGroups = () => Object.fromEntries(BANDED.map((id) => [id, []]));
+
 // Linhas como "04 Moving heads Beam 200". Uma linha terminada em ":" abre uma
 // categoria própria; itens que não se encaixam vão para "Outros itens".
 export function equipmentGroups(text) {
-  const groups = Object.fromEntries(GROUPS.map((g) => [g.id, []]));
+  const groups = emptyGroups();
   const custom = [],
     others = [];
   let current = null;
@@ -86,12 +91,41 @@ export function equipmentGroups(text) {
       current.items.push(item);
       continue;
     }
-    const group = GROUPS.find((g) => g.test.test(plain(item.name)));
-    (group ? groups[group.id] : others).push(item);
+    const guess = GUESSES.find((g) => g.test.test(plain(item.name)));
+    (guess ? groups[guess.id] : others).push(item);
   }
-  if (others.length) custom.push({ title: "OUTROS ITENS", items: others });
+  if (others.length) custom.push({ title: OTHERS_TITLE, items: others });
   return { groups, custom };
 }
+
+/**
+ * Agrupa os itens escolhidos no documento, que já trazem a categoria do cadastro
+ * de produtos, e junta as linhas digitadas à mão (essas ainda por palpite).
+ */
+export function equipmentFromItems(items, extras = "") {
+  const loose = equipmentGroups(extras);
+  const groups = loose.groups;
+  const custom = loose.custom;
+  const others = [];
+  for (const item of items || []) {
+    const name = String(item.name || "").trim();
+    if (!name) continue;
+    const line = { qty: qtyLabel(item.qty), name };
+    // Itens do catálogo entram antes das linhas soltas, na ordem em que foram escolhidos.
+    if (groups[item.category]) groups[item.category].push(line);
+    else others.push(line);
+  }
+  if (others.length) {
+    const existing = custom.find((group) => group.title === OTHERS_TITLE);
+    if (existing) existing.items.unshift(...others);
+    else custom.push({ title: OTHERS_TITLE, items: others });
+  }
+  return { groups, custom };
+}
+
+/** Itens do documento: do catálogo quando houver, senão do texto já gravado. */
+const equipmentOf = (b) =>
+  (b.items || []).length ? equipmentFromItems(b.items, b.equipmentExtra) : equipmentGroups(b.equipment);
 // Cláusulas como "1. TÍTULO" seguido do texto, ou "5.1 TÍTULO: texto". Uma linha numerada
 // com título em maiúsculas abre cláusula nova, mesmo sem linha em branco antes; uma linha
 // em branco encerra o parágrafo, e o texto seguinte sem número vira parágrafo próprio.
@@ -346,8 +380,8 @@ export function renderContractPdf(doc, b, company = {}) {
   }
   // ---------- Quadro de equipamentos por categoria ----------
   function equipment() {
-    if (!String(b.equipment || "").trim()) return;
-    const { groups, custom } = equipmentGroups(b.equipment);
+    if (!(b.items || []).length && !String(b.equipment || "").trim()) return;
+    const { groups, custom } = equipmentOf(b);
     const size = 7.4,
       h = lh(size) + 3.4,
       colW = W / 3,
@@ -356,8 +390,8 @@ export function renderContractPdf(doc, b, company = {}) {
       cell(x, y, qtyW, h, it?.qty || "", false, size);
       cell(x + qtyW, y, colW - qtyW, h, it?.name || "", false, size);
     };
-    for (const ids of BANDS) {
-      const cols = ids.map((id) => ({ title: GROUPS.find((g) => g.id === id).title, items: groups[id] }));
+    for (const ids of CATEGORY_BANDS) {
+      const cols = ids.map((id) => ({ title: categoryTitle(id), items: groups[id] }));
       const rows = Math.max(1, ...cols.map((col) => col.items.length));
       ensure(h * Math.min(rows + 1, 4));
       cols.forEach((col, i) => cell(M + i * colW, y, colW, h, col.title, true, size));

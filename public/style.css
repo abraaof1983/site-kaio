@@ -933,6 +933,92 @@ textarea:disabled {
   gap: 8px;
   margin-top: 4px;
 }
+/* Itens do catálogo: produto, quantidade, quadro do contrato e remover */
+.item-head,
+.item-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 84px minmax(0, 150px) 44px;
+  gap: 9px;
+  align-items: center;
+}
+.item-head {
+  font-size: var(--fs-xs);
+  font-weight: 600;
+  color: var(--text-muted);
+}
+.item-head[hidden] {
+  display: none;
+}
+.item-row {
+  margin: 2px 0;
+}
+.item-row .icon-button {
+  min-height: var(--target);
+}
+.item-category {
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+.items-sum {
+  margin: 2px 0 0;
+  font-size: var(--fs-sm);
+  color: var(--text-muted);
+}
+.items-sum:empty {
+  display: none;
+}
+.item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 4px;
+}
+/* No celular as quatro colunas não cabem: produto em cima, resto embaixo */
+@media (max-width: 620px) {
+  .item-head {
+    display: none;
+  }
+  .item-row {
+    grid-template-columns: 84px minmax(0, 1fr) 44px;
+    grid-template-areas:
+      "produto produto remover"
+      "qtd quadro quadro";
+    row-gap: 7px;
+    padding-bottom: 11px;
+    border-bottom: 1px solid var(--line-soft);
+  }
+  .item-row [data-item-product] {
+    grid-area: produto;
+  }
+  .item-row [data-remove-item] {
+    grid-area: remover;
+  }
+  .item-row [data-item-qty] {
+    grid-area: qtd;
+  }
+  .item-row [data-item-category] {
+    grid-area: quadro;
+  }
+}
+/* Catálogo de produtos, agrupado pelo quadro do contrato */
+.product-group + .product-group {
+  margin-top: 16px;
+}
+.product-group > .hint {
+  margin: -6px 0 12px;
+}
+.service-group + .service-group {
+  margin-top: 12px;
+}
+.service-group h3 {
+  margin: 0 0 4px;
+  font-size: var(--fs-xs);
+  font-weight: 700;
+  letter-spacing: 0.6px;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
 .icon-button {
   min-width: 40px;
   min-height: 40px;

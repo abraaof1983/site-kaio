@@ -144,6 +144,30 @@ Para conferir o executável compilado, `npm run verify:exe` (veja **Compilar o e
 
 ## Modelos de orçamento embarcados
 
+## Produtos e pacotes
+
+**Produtos** é o catálogo de equipamentos e serviços avulsos. Cada produto escolhe **em qual quadro do contrato** ele é impresso:
+
+| Quadro no cadastro | Coluna no contrato |
+|---|---|
+| Som da festa | EQUIPAMENTOS DE SOM “FESTA” |
+| DJ | EQUIPAMENTOS DJ FESTA |
+| Iluminação e efeitos | ILUMINAÇÃO E EFEITOS PARA DANÇA |
+| Som da cerimônia | EQUIPAMENTOS DE SOM CERIMÔNIA |
+| Kit mídia (fotos e vídeos) | KIT MÍDIA FOTOS E VÍDEOS |
+| Cênicas (iluminação decorativa) | CÊNICAS – ILUMINAÇÃO DECORATIVA |
+| Outros itens | OUTROS ITENS |
+
+Com isso a coluna deixa de ser adivinhada pelo nome do item. Uma "Luz âmbar para as mesas" cadastrada em **Cênicas** sai no quadro de cênicas, e não na iluminação de pista.
+
+Em **Pacotes e preços**, monte o pacote escolhendo produtos e quantidades. O preço do pacote continua sendo digitado por você; a soma dos valores de referência dos produtos aparece ao lado apenas para comparar.
+
+No orçamento e no contrato, os itens vêm do pacote escolhido e podem ser ajustados para aquele evento: é assim que você acrescenta as luzes cênicas ou o som da cerimônia a um contrato específico, e eles aparecem no quadro certo do PDF. O campo **Outros itens** aceita uma linha por item, para o que não está no catálogo.
+
+O item fica gravado no documento com o nome e o quadro do momento da emissão. Editar ou excluir um produto depois **não altera** documentos já emitidos. Documentos antigos, que só tinham a lista em texto, continuam funcionando: o texto aparece em **Outros itens** e o contrato segue classificando essas linhas pelo nome.
+
+## Modelos de orçamento embarcados
+
 O módulo **Orçamentos** inclui os modelos **Lagoa Vila Serena**, **Castelli Mondini** e **Gottesgabe Eventos**, com a identidade visual, logo e imagem ilustrativa dos exemplos enviados. Os modelos ficam disponíveis também para contas já existentes, sem recriar usuários ou substituir cadastros.
 
 Em **Novo orçamento**, escolha o modelo (ou **Começar em branco**), selecione o cliente e preencha a data do novo evento. Nada vem pré-selecionado: o modelo também pode ser trocado depois, no campo **Modelo visual**. O local, os serviços, os equipamentos e os preços de referência são preenchidos e continuam editáveis antes da emissão. O modelo Castelli inclui opções de pacote completo, iluminação, somente DJ e cerimônia externa. Os exemplos não especificam equipamentos do kit de cerimônia ou da opção de iluminação: confirme a composição ao negociar.
