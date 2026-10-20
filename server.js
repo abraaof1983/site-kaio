@@ -2,6 +2,7 @@ import express from "express";
 import { DatabaseSync } from "node:sqlite";
 import { scryptSync, randomBytes, timingSafeEqual } from "node:crypto";
 import { mkdirSync } from "node:fs";
+import { spawn } from "node:child_process";
 import PDFDocument from "pdfkit";
 import { QUOTE_TEMPLATES, getQuoteTemplate } from "./public/quote-templates.js";
 import { renderQuotePdf } from "./quote-pdf.js";
@@ -22,6 +23,7 @@ const defaultSettings = {
   phone: "",
   address: "Blumenau · SC",
   pix: "28.491.743/0001-20",
+  quoteValidityDays: 15,
   clauses: initialClauses,
 };
 const stmt = (q, ...a) => db.prepare(q).run(...a);
@@ -187,6 +189,15 @@ function validate(kind, b) {
     (!Number.isFinite(Number(b.price)) || Number(b.price) < 0)
   )
     return "Preço inválido.";
+  if (
+    kind === "settings" &&
+    b.quoteValidityDays != null &&
+    b.quoteValidityDays !== "" &&
+    (!Number.isInteger(Number(b.quoteValidityDays)) ||
+      Number(b.quoteValidityDays) < 1 ||
+      Number(b.quoteValidityDays) > 365)
+  )
+    return "Informe uma validade padrão entre 1 e 365 dias.";
   if (kind === "documents") {
     if (
       !b.client?.name ||
@@ -256,6 +267,8 @@ app.post("/api/records/:kind", (req, res) => {
   const b = req.body;
   const error = validate(kind, b);
   if (error) return res.status(400).json({ error });
+  if (kind === "settings" && b.quoteValidityDays != null && b.quoteValidityDays !== "")
+    b.quoteValidityDays = Number(b.quoteValidityDays);
   const existing =
     b.id &&
     get(
@@ -407,8 +420,14 @@ app.get("/api/documents/:id/pdf", (req, res) => {
         ? "Contrato de prestação de serviços"
         : "Proposta comercial",
     );
+  // Situações internas (enviado, aprovado, assinado) não aparecem no documento do cliente;
+  // ficam só os avisos que afetam a validade do documento: rascunho e cancelado.
+  const documentWarning = {
+    draft: "RASCUNHO — REVISAR ANTES DE ASSINAR",
+    cancelled: "CANCELADO",
+  }[b.status];
   text(
-    `${b.number} • Emissão: ${new Date(b.createdAt).toLocaleDateString("pt-BR")} • ${b.status === "draft" ? "RASCUNHO — REVISAR ANTES DE ASSINAR" : { sent: "Enviado", approved: "Aprovado", signed: "Assinatura informada manualmente", cancelled: "Cancelado" }[b.status]}`,
+    `${b.number} • Emissão: ${new Date(b.createdAt).toLocaleDateString("pt-BR")}${documentWarning ? ` • ${documentWarning}` : ""}`,
   );
   title("01 / Cliente e evento");
   text(`${b.client.name} | CPF/CNPJ: ${b.client.document || "Não informado"}`);
@@ -491,6 +510,16 @@ app.use((err, req, res, next) => {
   if (!res.headersSent)
     res.status(500).json({ error: "Não foi possível concluir a operação." });
 });
-app.listen(Number(process.env.PORT || 3000), "0.0.0.0", () =>
-  console.log("AOF Gestão iniciada na porta " + (process.env.PORT || 3000)),
-);
+const port = Number(process.env.PORT || 3000);
+app.listen(port, "0.0.0.0", () => {
+  console.log("AOF Gestão iniciada na porta " + port);
+  // O iniciador do Windows pede para abrir o navegador só quando o servidor já responde.
+  if (process.env.AOF_OPEN_BROWSER === "1" && process.platform === "win32")
+    spawn("cmd", ["/c", "start", "", `http://localhost:${port}`], {
+      detached: true,
+      stdio: "ignore",
+      windowsHide: true,
+    })
+      .on("error", () => {})
+      .unref();
+});
