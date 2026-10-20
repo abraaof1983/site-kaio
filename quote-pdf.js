@@ -1,5 +1,7 @@
 import { tryAsset } from "./app-env.js";
+import { logoBuffer } from "./branding.js";
 import { dateBeforeEvent, getQuoteTemplate } from "./public/quote-templates.js";
+import { getEventType } from "./public/event-types.js";
 
 const colors = {
   background: "#101719",
@@ -31,9 +33,15 @@ const normalized = (value) =>
 /** Draw a quote on a piped PDFKit document. The caller owns doc.end(). */
 export function renderQuotePdf(doc, b, company, template = null) {
   const c = company || {};
+  // A companhia pertence ao documento: o logo não acompanha futuras alterações
+  // nas configurações da conta nem os logos de outros usuários.
+  const customLogo = logoBuffer(c.quoteLogoDataUrl);
   // Only an explicitly supplied snapshot enables a model. In particular, old
   // quotes must not acquire today's catalogue prices when downloaded again.
   const model = template;
+  // Only an explicit event type selects new artwork; existing documents keep
+  // their original presentation until the user chooses a category.
+  const eventType = getEventType(b.eventType);
   const catalogue = model ? getQuoteTemplate(model.id || b.templateId) : null;
   const offers = Array.isArray(model?.offers) ? model.offers : [];
   const selected = offers.find((offer) => offer.id === b.offerId) || offers[0];
@@ -54,8 +62,9 @@ export function renderQuotePdf(doc, b, company, template = null) {
           .join("\n")
           .trim()
     : b.notes;
-  const brand =
-    model?.brand || catalogue?.brand || c.company || "Proposta comercial";
+  const brand = customLogo
+    ? c.company || model?.brand || "Proposta comercial"
+    : model?.brand || catalogue?.brand || c.company || "Proposta comercial";
   const margin = 48;
   const width = doc.page.width - margin * 2;
   const bottom = () => doc.page.height - 67;
@@ -141,22 +150,22 @@ export function renderQuotePdf(doc, b, company, template = null) {
       .rect(0, 0, doc.page.width, doc.page.height)
       .fill(colors.background)
       .restore();
-    const logo = model ? tryAsset("public/quote-assets/logo.jpg") : null;
+    const logo =
+      customLogo || (model ? tryAsset("public/quote-assets/logo.jpg") : null);
     const showLogo = Boolean(logo);
+    const logoWidth = customLogo ? 92 : 46;
     const top = 39;
     if (showLogo) {
-      doc
-        .save()
-        .circle(margin + 23, top + 23, 23)
-        .clip();
+      doc.save();
+      if (!customLogo) doc.circle(margin + 23, top + 23, 23).clip();
       doc.image(logo, margin, top, {
-        fit: [46, 46],
+        fit: [logoWidth, 46],
         align: "center",
         valign: "center",
       });
       doc.restore();
     }
-    const bx = showLogo ? margin + 61 : margin;
+    const bx = showLogo ? margin + logoWidth + 15 : margin;
     const bw = width - (bx - margin);
     const brandLines = wrap(brand, bw, continuation ? 16 : 20, true);
     const brandHeight = brandLines.length * (continuation ? 20 : 24);
@@ -166,12 +175,12 @@ export function renderQuotePdf(doc, b, company, template = null) {
         bold: true,
       });
     }
-    const tagline =
-      model?.tagline ||
-      catalogue?.tagline ||
-      [c.representative, c.cnpj && `CNPJ ${c.cnpj}`]
-        .filter(Boolean)
-        .join(" • ");
+    const companyLine = [c.representative, c.cnpj && `CNPJ ${c.cnpj}`]
+      .filter(Boolean)
+      .join(" • ");
+    const tagline = customLogo
+      ? companyLine
+      : model?.tagline || catalogue?.tagline || companyLine;
     const taglineLines = wrap(tagline, bw, 7.8);
     let headerBottom = top + brandHeight + 3;
     for (const item of taglineLines) {
@@ -344,14 +353,12 @@ export function renderQuotePdf(doc, b, company, template = null) {
       }
       line(value, x + 13, top + 34, { size, bold: true });
       const details = wrap(card.detail, cardWidth - 26, 7.6);
-      details
-        .slice(0, 2)
-        .forEach((item, i) =>
-          line(item, x + 13, top + 66 + i * 10, {
-            size: 7.6,
-            color: colors.muted,
-          }),
-        );
+      details.slice(0, 2).forEach((item, i) =>
+        line(item, x + 13, top + 66 + i * 10, {
+          size: 7.6,
+          color: colors.muted,
+        }),
+      );
     });
     y += cardHeight + 9;
     const chosenPrice = b.paymentChoice === "installments" ? installment : cash;
@@ -511,11 +518,10 @@ export function renderQuotePdf(doc, b, company, template = null) {
   }
 
   paint();
-  text(b.quoteHeadline || model?.headline || "Proposta comercial", {
-    size: 25,
-    bold: true,
-    gap: 11,
-  });
+  text(
+    b.quoteHeadline || eventType?.headline || model?.headline || "Proposta comercial",
+    { size: 25, bold: true, gap: 11 },
+  );
 
   const venue = b.venue || model?.venue || "Local a definir";
   const dateWidth = 125;
@@ -533,6 +539,12 @@ export function renderQuotePdf(doc, b, company, template = null) {
   });
   if (b.event)
     text(`Evento: ${b.event}`, { size: 8, color: colors.muted, gap: 3 });
+  if (eventType)
+    text(`Tipo de evento: ${eventType.label}`, {
+      size: 8,
+      color: colors.muted,
+      gap: 3,
+    });
   contactDetails();
   const schedule = [
     b.guests && `${b.guests} convidados`,
@@ -544,15 +556,21 @@ export function renderQuotePdf(doc, b, company, template = null) {
     .filter(Boolean)
     .join("  •  ");
   if (schedule) text(schedule, { size: 7.5, color: colors.muted, gap: 3 });
-  const introduction = b.introduction ?? model?.introduction;
+  const introduction =
+    b.introduction ?? eventType?.introduction ?? model?.introduction;
   if (introduction)
     text(introduction, { size: 8.5, color: colors.muted, gap: 9 });
 
-  const hero = model ? tryAsset("public/quote-assets/estrutura.png") : null;
+  const hero = eventType
+    ? tryAsset(eventType.imagePath)
+    : model
+      ? tryAsset("public/quote-assets/estrutura.png")
+      : null;
   if (hero) {
     const imageHeight = 165;
     const caption = wrap(
-      model.imageCaption ||
+      eventType?.imageCaption ||
+        model?.imageCaption ||
         catalogue?.imageCaption ||
         "Imagem ilustrativa da estrutura.",
       width,

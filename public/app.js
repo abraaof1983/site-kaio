@@ -7,6 +7,7 @@ import {
   qtyLabel,
 } from "./catalog.js";
 import { QUOTE_TEMPLATES, dateBeforeEvent } from "./quote-templates.js";
+import { EVENT_TYPES, getEventType } from "./event-types.js";
 import {
   addDays,
   daysBetween,
@@ -70,7 +71,8 @@ const icons = {
   clients:
     '<circle cx="9" cy="8" r="3"/><path d="M3 21v-4a6 6 0 0 1 12 0v4M16 5a3 3 0 0 1 0 6M18 15a4 4 0 0 1 3 4"/>',
   packages: '<path d="m12 3 9 5-9 5-9-5zM3 8v9l9 5 9-5V8M12 13v9M7 5l10 5"/>',
-  products: '<path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0l-7.2-7.2A2 2 0 0 1 3 12V5a2 2 0 0 1 2-2h7a2 2 0 0 1 1.4.6l7.2 7.2a2 2 0 0 1 0 2.6zM7.5 7.5h.01"/>',
+  products:
+    '<path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0l-7.2-7.2A2 2 0 0 1 3 12V5a2 2 0 0 1 2-2h7a2 2 0 0 1 1.4.6l7.2 7.2a2 2 0 0 1 0 2.6zM7.5 7.5h.01"/>',
   settings:
     '<path d="m9 3-1 3-3 1 1 4-2 2 2 4 3-1 3 3 3-3 3 1 2-4-2-2 1-4-3-1-1-3z"/><circle cx="12" cy="11" r="3"/>',
   logout: '<path d="M14 4h5v16h-5M10 8l-4 4 4 4M6 12h11"/>',
@@ -177,7 +179,10 @@ function toast(message, type = "success", { action = null } = {}) {
 }
 function startToastTimer() {
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(hideToast, Number($("#toast").dataset.duration || 5000));
+  toastTimer = setTimeout(
+    hideToast,
+    Number($("#toast").dataset.duration || 5000),
+  );
 }
 function hideToast() {
   clearTimeout(toastTimer);
@@ -193,11 +198,13 @@ function closeAlert() {
 
 // ---------- Campos de formulário ----------
 const REQUIRED = ' <span class="req" aria-hidden="true">*</span>';
-const describedBy = (id, hint) => (hint ? ` aria-describedby="${id}-hint"` : "");
+const describedBy = (id, hint) =>
+  hint ? ` aria-describedby="${id}-hint"` : "";
 const hintHtml = (id, hint) =>
   hint ? `<p class="hint" id="${id}-hint">${hint}</p>` : "";
 const section = (title) => `<h3 class="form-section">${title}</h3>`;
-const LEGEND = '<p class="form-legend">Campos marcados com * são obrigatórios.</p>';
+const LEGEND =
+  '<p class="form-legend">Campos marcados com * são obrigatórios.</p>';
 
 function field(
   label,
@@ -221,7 +228,13 @@ function moneyField(
   const id = `f-${name}`;
   return `<div class="field"><label for="${id}">${label}<span class="sr-only"> em reais</span>${required ? REQUIRED : ""}</label><div class="input-affix"><span class="affix" aria-hidden="true">R$</span><input id="${id}" name="${name}" type="text" inputmode="decimal" autocomplete="off" data-money value="${esc(formatMoneyInput(value))}"${required ? " required" : ""}${describedBy(id, hint)} ${attrs}></div>${hintHtml(id, hint)}</div>`;
 }
-function area(label, name, value = "", full = true, { attrs = "", hint = "" } = {}) {
+function area(
+  label,
+  name,
+  value = "",
+  full = true,
+  { attrs = "", hint = "" } = {},
+) {
   const id = `f-${name}`;
   return `<div class="field${full ? " full" : ""}"><label for="${id}">${label}</label><textarea id="${id}" name="${name}"${describedBy(id, hint)} ${attrs}>${esc(value)}</textarea>${hintHtml(id, hint)}</div>`;
 }
@@ -235,7 +248,9 @@ function select(
 ) {
   const id = `f-${name}`;
   const opts =
-    (placeholder != null ? `<option value="">${esc(placeholder)}</option>` : "") +
+    (placeholder != null
+      ? `<option value="">${esc(placeholder)}</option>`
+      : "") +
     options
       .map(
         ([v, l]) =>
@@ -244,7 +259,14 @@ function select(
       .join("");
   return `<div class="field${full ? " full" : ""}"><label for="${id}">${label}${required ? REQUIRED : ""}</label><select id="${id}" name="${name}"${required ? " required" : ""}${describedBy(id, hint)}>${opts}</select>${hintHtml(id, hint)}</div>`;
 }
-function passwordField(id, name, label, autocomplete, attrs = "", full = false) {
+function passwordField(
+  id,
+  name,
+  label,
+  autocomplete,
+  attrs = "",
+  full = false,
+) {
   return `<div class="field${full ? " full" : ""}"><label for="${id}">${label}${REQUIRED}</label><div class="input-affix password"><input id="${id}" name="${name}" type="password" autocomplete="${autocomplete}" required ${attrs}><button type="button" class="toggle-password" data-toggle-password="${id}">Mostrar<span class="sr-only"> senha</span></button></div></div>`;
 }
 
@@ -270,7 +292,8 @@ function updateCustomValidity(el) {
   );
 }
 function fieldLabel(el) {
-  const label = el.id && document.querySelector(`label[for="${CSS.escape(el.id)}"]`);
+  const label =
+    el.id && document.querySelector(`label[for="${CSS.escape(el.id)}"]`);
   if (!label) return el.getAttribute("aria-label") || "Campo";
   return [...label.childNodes]
     .filter((node) => !(node.nodeType === 1 && node.matches(".req, .sr-only")))
@@ -301,7 +324,9 @@ function validationMessage(el) {
   return el.validationMessage || "Verifique este campo.";
 }
 function addDescribedBy(el, id) {
-  const ids = new Set((el.getAttribute("aria-describedby") || "").split(/\s+/).filter(Boolean));
+  const ids = new Set(
+    (el.getAttribute("aria-describedby") || "").split(/\s+/).filter(Boolean),
+  );
   ids.add(id);
   el.setAttribute("aria-describedby", [...ids].join(" "));
 }
@@ -339,7 +364,9 @@ function clearError(el) {
     delete target.dataset.errorId;
     delete target.dataset.groupError;
   }
-  const item = document.querySelector(`.error-summary [data-error-for="${errorId}"]`);
+  const item = document.querySelector(
+    `.error-summary [data-error-for="${errorId}"]`,
+  );
   const summary = item?.closest(".error-summary");
   item?.remove();
   if (summary && !summary.querySelector("li")) summary.remove();
@@ -382,11 +409,16 @@ function validateForm(form, { host = null, extra = [] } = {}) {
   clearErrors(form);
   const errors = [];
   for (const el of form.elements) {
-    if (!(el instanceof HTMLInputElement || el instanceof HTMLSelectElement || el instanceof HTMLTextAreaElement))
+    if (!(
+      el instanceof HTMLInputElement ||
+      el instanceof HTMLSelectElement ||
+      el instanceof HTMLTextAreaElement
+    ))
       continue;
     if (el.disabled || !el.willValidate) continue;
     updateCustomValidity(el);
-    if (!el.checkValidity()) errors.push({ el, message: validationMessage(el) });
+    if (!el.checkValidity())
+      errors.push({ el, message: validationMessage(el) });
   }
   errors.push(...extra);
   for (const error of errors) showError(error);
@@ -396,7 +428,8 @@ function validateForm(form, { host = null, extra = [] } = {}) {
   return false;
 }
 function revalidate(el) {
-  if (!el?.dataset?.errorId || el.dataset.groupError || !el.willValidate) return;
+  if (!el?.dataset?.errorId || el.dataset.groupError || !el.willValidate)
+    return;
   updateCustomValidity(el);
   if (el.checkValidity()) clearError(el);
 }
@@ -438,13 +471,26 @@ function readDraft(key) {
 function clearDrafts() {
   try {
     for (const key of Object.keys(localStorage))
-      if (key.startsWith(`aof-draft:${user?.id}:`)) localStorage.removeItem(key);
+      if (key.startsWith(`aof-draft:${user?.id}:`))
+        localStorage.removeItem(key);
   } catch {}
 }
 function focusSelector(el) {
   if (!el || !root.contains(el)) return null;
-  for (const attr of ["data-edit-doc", "data-edit-client", "data-edit-product", "data-edit-package", "data-convert", "data-send", "data-duplicate", "data-quote-template", "data-new-for", "data-new"])
-    if (el.hasAttribute(attr)) return `[${attr}="${CSS.escape(el.getAttribute(attr))}"]`;
+  for (const attr of [
+    "data-edit-doc",
+    "data-edit-client",
+    "data-edit-product",
+    "data-edit-package",
+    "data-convert",
+    "data-send",
+    "data-duplicate",
+    "data-quote-template",
+    "data-new-for",
+    "data-new",
+  ])
+    if (el.hasAttribute(attr))
+      return `[${attr}="${CSS.escape(el.getAttribute(attr))}"]`;
   // Ações escolhidas no menu "⋯" devolvem o foco ao próprio botão "⋯" da linha.
   if (el.closest("#row-menu") && menuTrigger?.dataset.menu)
     return `[data-menu="${CSS.escape(menuTrigger.dataset.menu)}"]`;
@@ -457,7 +503,7 @@ function auth(register = false) {
   state = null;
   pageGuard = null;
   document.title = `${register ? "Criar conta" : "Entrar"} · AOF Studio`;
-  root.innerHTML = `<div class="auth"><section class="auth-story"><div class="brand"><span class="mark" aria-hidden="true">a</span> AOF studio</div><div><p class="eyebrow">MENOS PAPELADA. MAIS CELEBRAÇÃO.</p><p class="auth-headline">Grandes eventos começam com tudo em ordem.</p><p>Seu próximo capítulo começa aqui. Organize propostas, formalize contratos e cuide do que faz a festa acontecer.</p><div class="auth-art" aria-hidden="true">✳ ── ◌</div></div><small>AOF Serviços · DJ Kaio Jansen</small></section><main class="auth-form"><form id="authform" novalidate><p class="eyebrow">SEU ESCRITÓRIO DE EVENTOS</p><h1>${register ? "Crie sua conta" : "Que bom ter você aqui."}</h1><p class="muted">${register ? "Organização para cada nova celebração." : "Entre para acompanhar seus negócios."}</p>${register ? field("Nome completo", "name", "", "text", true, false, { attrs: 'autocomplete="name"' }) : ""}${field("E-mail", "email", "", "email", true, false, { attrs: 'autocomplete="username"' })}${passwordField("f-password", "password", "Senha", register ? "new-password" : "current-password", register ? 'minlength="10" aria-describedby="password-hint"' : "")}${register ? '<p class="hint" id="password-hint">Use pelo menos 10 caracteres. Sua conta terá seus próprios clientes e documentos.</p>' : ""}<div class="error" id="autherror" role="alert"></div><button type="submit" class="primary">${register ? "Criar minha conta" : "Entrar na minha conta"} <span aria-hidden="true">→</span></button><button class="auth-switch" type="button">${register ? "Já tenho uma conta. Entrar" : "Primeiro acesso? Criar uma conta"}</button></form></main></div>`;
+  root.innerHTML = `<div class="auth"><section class="auth-story"><div class="brand"><img class="mark app-icon" src="/aof-studio.ico" alt="" aria-hidden="true"> AOF studio</div><div><p class="eyebrow">MENOS PAPELADA. MAIS CELEBRAÇÃO.</p><p class="auth-headline">Grandes eventos começam com tudo em ordem.</p><p>Seu próximo capítulo começa aqui. Organize propostas, formalize contratos e cuide do que faz a festa acontecer.</p><div class="auth-art" aria-hidden="true">✳ ── ◌</div></div><small>AOF Serviços · DJ Kaio Jansen</small></section><main class="auth-form"><form id="authform" novalidate><p class="eyebrow">SEU ESCRITÓRIO DE EVENTOS</p><h1>${register ? "Crie sua conta" : "Que bom ter você aqui."}</h1><p class="muted">${register ? "Organização para cada nova celebração." : "Entre para acompanhar seus negócios."}</p>${register ? field("Nome completo", "name", "", "text", true, false, { attrs: 'autocomplete="name"' }) : ""}${field("E-mail", "email", "", "email", true, false, { attrs: 'autocomplete="username"' })}${passwordField("f-password", "password", "Senha", register ? "new-password" : "current-password", register ? 'minlength="10" aria-describedby="password-hint"' : "")}${register ? '<p class="hint" id="password-hint">Use pelo menos 10 caracteres. Sua conta terá seus próprios clientes e documentos.</p>' : ""}<div class="error" id="autherror" role="alert"></div><button type="submit" class="primary">${register ? "Criar minha conta" : "Entrar na minha conta"} <span aria-hidden="true">→</span></button><button class="auth-switch" type="button">${register ? "Já tenho uma conta. Entrar" : "Primeiro acesso? Criar uma conta"}</button></form></main></div>`;
   $(".auth-switch").onclick = () => auth(!register);
   const form = $("#authform");
   form.addEventListener("input", (event) => revalidate(event.target));
@@ -470,7 +516,10 @@ function auth(register = false) {
     button.disabled = true;
     button.textContent = register ? "Criando conta…" : "Entrando…";
     try {
-      user = await api(register ? "/register" : "/login", Object.fromEntries(new FormData(form)));
+      user = await api(
+        register ? "/register" : "/login",
+        Object.fromEntries(new FormData(form)),
+      );
       pendingFocus = "heading";
       await load();
     } catch (error) {
@@ -497,7 +546,9 @@ function reauthenticate() {
     const cancel = () =>
       finish(
         Object.assign(
-          Error("Sua sessão expirou. Entre novamente para salvar: o que você digitou continua no formulário."),
+          Error(
+            "Sua sessão expirou. Entre novamente para salvar: o que você digitou continua no formulário.",
+          ),
           { status: 401 },
         ),
       );
@@ -555,17 +606,24 @@ function docs(type) {
 // Documentos fora do arquivo: os únicos que entram no painel, contagens e agenda.
 const activeDocs = (type) => docs(type).filter((d) => !d.archived);
 const findDoc = (id) => state.documents.find((d) => d.id === Number(id));
-const findClient = (id) => state.clients.find((c) => String(c.id) === String(id));
+const findClient = (id) =>
+  state.clients.find((c) => String(c.id) === String(id));
 const contractFor = (quote) =>
-  quote && state.documents.find((d) => d.type === "contract" && d.sourceId === quote.id);
-const displayStatus = (d) => statusOf(d, { contract: contractFor(d), today: today() });
+  quote &&
+  state.documents.find((d) => d.type === "contract" && d.sourceId === quote.id);
+const displayStatus = (d) =>
+  statusOf(d, { contract: contractFor(d), today: today() });
 const docHref = (d) => buildHash({ page: listPageFor(d.type), id: d.id });
 const docKind = (d) => (d.type === "quote" ? "Orçamento" : "Contrato");
 const docsOfClient = (c) =>
-  state.documents.filter((d) => String(d.clientId ?? d.client?.id ?? "") === String(c.id));
+  state.documents.filter(
+    (d) => String(d.clientId ?? d.client?.id ?? "") === String(c.id),
+  );
 function validityNote(d, status) {
   const info = validityInfo(d, status, today());
-  return info ? `<small class="doc-note ${info.tone}">${info.text}</small>` : "";
+  return info
+    ? `<small class="doc-note ${info.tone}">${info.text}</small>`
+    : "";
 }
 const dateTime = (iso) =>
   new Date(iso).toLocaleString("pt-BR", {
@@ -577,7 +635,10 @@ const dateTime = (iso) =>
   });
 // Histórico gravado pelo servidor; documentos antigos só têm a data de criação.
 function historyEvents(d) {
-  const list = Array.isArray(d.history) && d.history.length ? d.history : [{ type: "created", at: d.createdAt }];
+  const list =
+    Array.isArray(d.history) && d.history.length
+      ? d.history
+      : [{ type: "created", at: d.createdAt }];
   const label = (e) =>
     ({
       created: e.fromQuote
@@ -592,7 +653,10 @@ function historyEvents(d) {
       archived: "Arquivado",
       restored: "Restaurado",
     })[e.type] || "Atualizado";
-  return list.filter((e) => e.at).map((e) => ({ at: e.at, text: label(e) })).reverse();
+  return list
+    .filter((e) => e.at)
+    .map((e) => ({ at: e.at, text: label(e) }))
+    .reverse();
 }
 const labels = {
   dashboard: "Visão geral",
@@ -611,7 +675,10 @@ const linkButton = (href, label, cls = "") =>
 function render() {
   pageGuard = null;
   // /#/orcamentos/5 de um contrato vira /#/contratos/5, sem novo item no histórico.
-  const doc = route.id != null && ["quotes", "contracts"].includes(route.page) ? findDoc(route.id) : null;
+  const doc =
+    route.id != null && ["quotes", "contracts"].includes(route.page)
+      ? findDoc(route.id)
+      : null;
   if (doc && listPageFor(doc.type) !== route.page) {
     route = { ...route, page: listPageFor(doc.type) };
     history.replaceState(null, "", buildHash(route));
@@ -623,15 +690,31 @@ function render() {
   if (route.page === "settings") bindSettings();
   const focus = pendingFocus;
   pendingFocus = null;
-  if (focus) ((focus !== "heading" && root.querySelector(focus)) || root.querySelector("h1"))?.focus();
+  if (focus)
+    (
+      (focus !== "heading" && root.querySelector(focus)) ||
+      root.querySelector("h1")
+    )?.focus();
 }
-const NAV = ["dashboard", "quotes", "contracts", "clients", "products", "packages", "settings"];
+const NAV = [
+  "dashboard",
+  "quotes",
+  "contracts",
+  "clients",
+  "products",
+  "packages",
+  "settings",
+];
 // Na lista, aria-current="page"; na tela de um documento, a seção fica marcada como "true".
 const currentAttr = (k) =>
-  route.page !== k ? "" : route.id == null ? ' aria-current="page"' : ' aria-current="true"';
+  route.page !== k
+    ? ""
+    : route.id == null
+      ? ' aria-current="page"'
+      : ' aria-current="true"';
 function sidebar() {
   const contractCount = activeDocs("contract").length;
-  return `<div class="sidebar"><div class="brand"><span class="mark" aria-hidden="true">a</span><div class="brand-text">aof<span class="brand-soft">studio</span><small>GESTÃO DE EVENTOS</small></div></div><p class="nav-label" id="nav-label">ESPAÇO DE TRABALHO</p><nav class="nav" aria-labelledby="nav-label">${NAV.map(
+  return `<div class="sidebar"><div class="brand"><img class="mark app-icon" src="/aof-studio.ico" alt="" aria-hidden="true"><div class="brand-text">aof<span class="brand-soft">studio</span><small>GESTÃO DE EVENTOS</small></div></div><p class="nav-label" id="nav-label">ESPAÇO DE TRABALHO</p><nav class="nav" aria-labelledby="nav-label">${NAV.map(
     (k) =>
       `<a href="${buildHash({ page: k })}" class="${route.page === k ? "active" : ""}"${currentAttr(k)}>${icon(k)}<span class="label">${labels[k]}</span>${k === "contracts" && contractCount ? `<span class="count">${contractCount}</span>` : ""}</a>`,
   ).join(
@@ -644,46 +727,76 @@ function topbar(crumbs) {
       ? `<li><a href="${c.href}">${esc(c.label)}</a></li>`
       : `<li><span aria-current="page">${esc(c.label)}</span></li>`,
   );
-  return `<header class="topbar"><span class="mark mobile-mark" aria-hidden="true">a</span><nav class="crumbs" aria-label="Você está em"><ol>${items.join("")}</ol></nav></header>`;
+  return `<header class="topbar"><img class="mark mobile-mark app-icon" src="/aof-studio.ico" alt="" aria-hidden="true"><nav class="crumbs" aria-label="Você está em"><ol>${items.join("")}</ol></nav></header>`;
 }
 // Celular: barra inferior com rótulos, botão "Novo" e menu "Mais".
 function bottomNav() {
   const item = (k, label, ic) =>
     `<a href="${buildHash({ page: k })}" class="tab-item${route.page === k ? " active" : ""}"${currentAttr(k)}>${icon(ic)}<span>${label}</span></a>`;
-  const moreActive = ["clients", "products", "packages", "settings"].includes(route.page);
+  const moreActive = ["clients", "products", "packages", "settings"].includes(
+    route.page,
+  );
   return `<nav class="bottom-nav" aria-label="Navegação principal">${item("dashboard", "Início", "dashboard")}${item("quotes", "Orçamentos", "quotes")}<button type="button" class="tab-item tab-new" popovertarget="new-menu">${icon("plus")}<span>Novo</span></button>${item("contracts", "Contratos", "contracts")}<button type="button" class="tab-item${moreActive ? " active" : ""}" popovertarget="more-menu">${icon("menu")}<span>Mais${moreActive ? `<span class="sr-only">, seção atual: ${labels[route.page]}</span>` : ""}</span></button></nav><div id="new-menu" class="sheet-menu" popover><p class="sheet-title">Criar</p><button type="button" data-new="quote">Novo orçamento</button><button type="button" data-new="contract">Novo contrato</button><button type="button" data-new="client">Novo cliente</button></div><div id="more-menu" class="sheet-menu" popover><a href="#/clientes">Clientes</a><a href="#/produtos">Produtos</a><a href="#/pacotes">Pacotes e preços</a><a href="#/configuracoes">Configurações</a><button type="button" data-action="logout">Sair da conta</button></div>`;
 }
 function head(title, description, buttons = "") {
   return `<div class="page-head"><div><h1 tabindex="-1">${title}</h1><p>${description}</p></div><div class="actions">${buttons}</div></div>`;
 }
 const HOME = { label: "Seu espaço", href: "#/" };
-const sectionCrumb = (page) => ({ label: labels[page], href: buildHash({ page }) });
+const sectionCrumb = (page) => ({
+  label: labels[page],
+  href: buildHash({ page }),
+});
 function notFound(title, message, page = "dashboard") {
   return {
     title,
-    crumbs: page === "dashboard" ? [HOME, { label: title }] : [HOME, sectionCrumb(page), { label: title }],
+    crumbs:
+      page === "dashboard"
+        ? [HOME, { label: title }]
+        : [HOME, sectionCrumb(page), { label: title }],
     html: `${head(title, message)}${linkButton(buildHash({ page }), page === "dashboard" ? "Ir para a Visão geral" : `Voltar para ${labels[page]}`, "primary")}`,
   };
 }
 // Cada tela devolve título da aba, trilha de navegação e conteúdo.
 function content(doc) {
   const { page, id } = route;
-  if (!route.known) return notFound("Página não encontrada", "Este endereço não corresponde a uma tela do sistema.");
+  if (!route.known)
+    return notFound(
+      "Página não encontrada",
+      "Este endereço não corresponde a uma tela do sistema.",
+    );
   if (id != null) {
     if (page === "clients") {
       const client = findClient(id);
-      return client ? clientDetail(client) : notFound("Cliente não encontrado", "Ele pode ter sido excluído.", "clients");
+      return client
+        ? clientDetail(client)
+        : notFound(
+            "Cliente não encontrado",
+            "Ele pode ter sido excluído.",
+            "clients",
+          );
     }
     return doc
       ? docDetail(doc)
-      : notFound("Documento não encontrado", "Ele pode ter sido excluído definitivamente.", page);
+      : notFound(
+          "Documento não encontrado",
+          "Ele pode ter sido excluído definitivamente.",
+          page,
+        );
   }
-  const view = (html) => ({ title: labels[page], crumbs: [HOME, { label: labels[page] }], html });
+  const view = (html) => ({
+    title: labels[page],
+    crumbs: [HOME, { label: labels[page] }],
+    html,
+  });
   if (page === "dashboard") return view(dashboard());
   if (page === "settings") return view(settings());
   if (page === "clients")
     return view(
-      head("Clientes", "Dados de contato usados nos orçamentos e contratos.", newButton("client", "Novo cliente")) +
+      head(
+        "Clientes",
+        "Dados de contato usados nos orçamentos e contratos.",
+        newButton("client", "Novo cliente"),
+      ) +
         toolbar() +
         `<div class="panel" id="list">${clientTable()}</div>`,
     );
@@ -697,7 +810,11 @@ function content(doc) {
     );
   if (page === "packages")
     return view(
-      head("Pacotes e preços", "Serviços, equipamentos e valores de referência para os orçamentos.", newButton("package", "Novo pacote")) +
+      head(
+        "Pacotes e preços",
+        "Serviços, equipamentos e valores de referência para os orçamentos.",
+        newButton("package", "Novo pacote"),
+      ) +
         `<div class="list-cards">${state.packages.map(packageCard).join("") || empty("Seu primeiro pacote", "Cadastre os serviços, equipamentos e o preço de cada experiência.", "package", "Criar pacote")}</div>`,
     );
   const isQ = page === "quotes",
@@ -705,7 +822,9 @@ function content(doc) {
   return view(
     head(
       isQ ? "Orçamentos" : "Contratos",
-      isQ ? "Crie propostas, acompanhe a validade e gere contratos." : "Revise cláusulas, condições e assinaturas de cada evento.",
+      isQ
+        ? "Crie propostas, acompanhe a validade e gere contratos."
+        : "Revise cláusulas, condições e assinaturas de cada evento.",
       newButton(kind, isQ ? "Novo orçamento" : "Novo contrato"),
     ) +
       toolbar(kind) +
@@ -725,12 +844,19 @@ function productList() {
   const actions = (p) =>
     `<button type="button" data-edit-product="${p.id}">Editar<span class="sr-only"> ${esc(p.name)}</span></button><button type="button" class="danger-outline" data-delete-product="${p.id}">Excluir<span class="sr-only"> ${esc(p.name)}</span></button>`;
   const value = (p) => (Number(p.price) > 0 ? money(p.price) : "—");
-  return EQUIPMENT_CATEGORIES.filter((c) => state.products.some((p) => p.category === c.id))
+  return EQUIPMENT_CATEGORIES.filter((c) =>
+    state.products.some((p) => p.category === c.id),
+  )
     .map((c) => {
       const list = state.products.filter((p) => p.category === c.id);
       return `<section class="panel product-group"><div class="panel-title"><h2>${esc(c.label)}</h2><span class="count">${list.length}</span></div><p class="hint">No contrato: ${esc(c.title)}</p><div class="table-wrap"><table><thead><tr><th scope="col">Produto</th><th scope="col">Valor de referência</th><th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${list
-        .map((p) => `<tr><td>${esc(p.name)}</td><td>${value(p)}</td><td><div class="rowactions">${actions(p)}</div></td></tr>`)
-        .join("")}</tbody></table></div><ul class="doc-cards" aria-label="Produtos de ${esc(c.label)}">${list
+        .map(
+          (p) =>
+            `<tr><td>${esc(p.name)}</td><td>${value(p)}</td><td><div class="rowactions">${actions(p)}</div></td></tr>`,
+        )
+        .join(
+          "",
+        )}</tbody></table></div><ul class="doc-cards" aria-label="Produtos de ${esc(c.label)}">${list
         .map(
           (p) =>
             `<li class="doc-card"><div class="doc-card-head"><strong>${esc(p.name)}</strong></div><p class="doc-card-meta"><span>${value(p)}</span></p><div class="rowactions">${actions(p)}</div></li>`,
@@ -750,11 +876,15 @@ function quoteGallery() {
     )
     .join("")}</div></section>`;
 }
-const entriesOf = (list) => list.map((doc) => ({ doc, status: displayStatus(doc) }));
+const entriesOf = (list) =>
+  list.map((doc) => ({ doc, status: displayStatus(doc) }));
 const countsFor = (kind) => tabCounts(entriesOf(docs(kind)), TABS[kind]);
 function tabsMarkup(kind) {
   const counts = countsFor(kind),
-    tabs = [...TABS[kind], ...(counts.archived || route.filter === "archived" ? ["archived"] : [])];
+    tabs = [
+      ...TABS[kind],
+      ...(counts.archived || route.filter === "archived" ? ["archived"] : []),
+    ];
   return `<div class="status-tabs" role="group" aria-label="Filtrar por situação">${tabs
     .map(
       (t) =>
@@ -765,8 +895,13 @@ function tabsMarkup(kind) {
 // Abas por situação (com contagem), busca e ordenação; tudo fica no endereço da tela.
 function toolbar(kind = null) {
   const sort = kind
-    ? `<label class="sort"><span>Ordenar por</span><select id="sort">${Object.entries(SORT_LABELS)
-        .map(([v, l]) => `<option value="${v}"${route.sort === v ? " selected" : ""}>${l}</option>`)
+    ? `<label class="sort"><span>Ordenar por</span><select id="sort">${Object.entries(
+        SORT_LABELS,
+      )
+        .map(
+          ([v, l]) =>
+            `<option value="${v}"${route.sort === v ? " selected" : ""}>${l}</option>`,
+        )
         .join("")}</select></label>`
     : "";
   return `${kind ? tabsMarkup(kind) : ""}<div class="toolbar" role="search"><label class="sr-only" for="search">Buscar</label><input type="search" id="search" placeholder="${kind ? "Buscar cliente, evento ou nº" : "Buscar nome, e-mail ou telefone"}" value="${esc(route.search)}" autocomplete="off">${sort}<p class="sr-only" id="results-status" role="status"></p></div>`;
@@ -777,7 +912,9 @@ function empty(title, description, kind, label) {
 function dashboard() {
   const contracts = activeDocs("contract"),
     quotes = activeDocs("quote"),
-    active = contracts.filter((d) => ["sent", "approved", "signed"].includes(d.status)),
+    active = contracts.filter((d) =>
+      ["sent", "approved", "signed"].includes(d.status),
+    ),
     closed = contracts.filter((d) => ["approved", "signed"].includes(d.status)),
     open = quotes.filter((d) => ["draft", "sent"].includes(displayStatus(d))),
     soon = open.filter((d) => {
@@ -791,7 +928,8 @@ function dashboard() {
     head(
       "Visão geral",
       `Olá${firstName() ? `, ${esc(firstName())}` : ""}. Acompanhe documentos, prazos e próximos eventos.`,
-      newButton("contract", "Novo contrato", false) + newButton("quote", "Novo orçamento"),
+      newButton("contract", "Novo contrato", false) +
+        newButton("quote", "Novo orçamento"),
     ) +
     `<div class="cards">${card("Contratos ativos", active.length, "Enviados, aprovados ou assinados", "contracts")}${card(
       "Orçamentos em aberto",
@@ -808,13 +946,22 @@ function dashboard() {
       true,
     )}</div><div class="grid"><div><section class="panel"><div class="panel-title"><h2>Documentos recentes</h2><div class="panel-links"><a class="link-button" href="#/orcamentos">Orçamentos</a><a class="link-button" href="#/contratos">Contratos</a></div></div>${docEntries(entriesOf(activeDocs().slice(0, 6)), { compact: true, emptyHtml: empty("Sua próxima história começa aqui", "Crie um orçamento, combine os detalhes e transforme em contrato.", "quote", "Criar primeiro orçamento") })}</section><section class="panel panel-gap"><div class="panel-title"><h2>Próximos eventos</h2><span>Contratos com data a partir de hoje</span></div>${eventList()}</section></div><aside class="aside-cards" aria-label="Catálogo de pacotes"><section class="panel"><div class="panel-title"><h2>Seu catálogo de experiências</h2></div>${
       pk
-        ? `<div class="package-box"><p class="package-label">EM DESTAQUE</p><h3>${esc(pk.name)}</h3><p class="price">${money(pk.price)}</p><p class="package-desc">${esc(pk.description)}</p><ul>${String(pk.equipment || "")
+        ? `<div class="package-box"><p class="package-label">EM DESTAQUE</p><h3>${esc(pk.name)}</h3><p class="price">${money(pk.price)}</p><p class="package-desc">${esc(pk.description)}</p><ul>${String(
+            pk.equipment || "",
+          )
             .split("\n")
             .filter(Boolean)
             .slice(0, 4)
             .map((x) => `<li>${esc(x)}</li>`)
-            .join("")}</ul>${linkButton("#/pacotes", "Gerenciar pacotes", "block")}</div>`
-        : empty("Monte seu catálogo", "Crie seu primeiro pacote.", "package", "Criar pacote")
+            .join(
+              "",
+            )}</ul>${linkButton("#/pacotes", "Gerenciar pacotes", "block")}</div>`
+        : empty(
+            "Monte seu catálogo",
+            "Crie seu primeiro pacote.",
+            "package",
+            "Criar pacote",
+          )
     }</section></aside></div>`
   );
 }
@@ -830,17 +977,30 @@ function eventList() {
             `<li><span class="badge approved">${date(d.date)}</span><div><a class="row-link" href="${docHref(d)}">${esc(d.event)}</a><small>${esc(d.client?.name)} · ${esc(d.venue || "Local a definir")}</small></div></li>`,
         )
         .join("")}</ul>`
-    : empty("A agenda está aberta", "Os próximos eventos dos seus contratos aparecerão aqui.");
+    : empty(
+        "A agenda está aberta",
+        "Os próximos eventos dos seus contratos aparecerão aqui.",
+      );
 }
 // Lista de uma página (orçamentos ou contratos) com a aba, a busca e a ordem atuais.
 function docList(kind) {
   const all = entriesOf(docs(kind));
   if (!all.length)
     return kind === "contract"
-      ? empty("Nenhum contrato ainda", "Gere um contrato a partir de um orçamento ou crie um do zero.", "contract", "Novo contrato")
+      ? empty(
+          "Nenhum contrato ainda",
+          "Gere um contrato a partir de um orçamento ou crie um do zero.",
+          "contract",
+          "Novo contrato",
+        )
       : `<div class="empty"><div class="empty-symbol" aria-hidden="true">◇</div><h3>Sua próxima história começa aqui</h3><p>Comece por um dos modelos prontos ou crie um orçamento em branco.</p></div>${quoteGallery()}<p class="empty-alt">${newButton("quote", "Começar em branco", false)}</p>`;
-  const visible = all.filter((e) => inTab(e, route.filter) && matchesSearch(e.doc, route.search));
-  const sorted = sortDocs(visible.map((e) => e.doc), route.sort).map((doc) => visible.find((e) => e.doc === doc));
+  const visible = all.filter(
+    (e) => inTab(e, route.filter) && matchesSearch(e.doc, route.search),
+  );
+  const sorted = sortDocs(
+    visible.map((e) => e.doc),
+    route.sort,
+  ).map((doc) => visible.find((e) => e.doc === doc));
   const emptyHtml =
     route.filter === "archived" && !route.search
       ? '<div class="empty"><h3>Nenhum documento arquivado</h3><p>Documentos arquivados saem das listas e do painel, e podem ser restaurados aqui.</p></div>'
@@ -848,31 +1008,44 @@ function docList(kind) {
   return docEntries(sorted, { kind, emptyHtml });
 }
 // Mesma lista em tabela (computador) e em cartões (celular); o CSS mostra uma das duas.
-function docEntries(entries, { kind = null, compact = false, emptyHtml = "" } = {}) {
+function docEntries(
+  entries,
+  { kind = null, compact = false, emptyHtml = "" } = {},
+) {
   if (!entries.length) return emptyHtml;
   const numberCol = !compact;
   return `<div class="table-wrap${compact ? " compact" : ""}"><table class="doc-table"><thead><tr><th scope="col">Cliente / evento</th>${numberCol ? '<th scope="col" class="col-num">Nº</th>' : ""}<th scope="col">${compact ? "Data" : "Data do evento"}</th><th scope="col">Valor</th><th scope="col">Situação</th><th scope="col">Ações</th></tr></thead><tbody>${entries
     .map((e) => docRow(e, { compact, numberCol }))
-    .join("")}</tbody></table></div><ul class="doc-cards" aria-label="${kind ? (kind === "quote" ? "Orçamentos" : "Contratos") : "Documentos"}">${entries.map(docCard).join("")}</ul>`;
+    .join(
+      "",
+    )}</tbody></table></div><ul class="doc-cards" aria-label="${kind ? (kind === "quote" ? "Orçamentos" : "Contratos") : "Documentos"}">${entries.map(docCard).join("")}</ul>`;
 }
-const rowContext = (d) => `<span class="sr-only">: ${esc(d.client?.name)}, ${esc(d.event)}</span>`;
+const rowContext = (d) =>
+  `<span class="sr-only">: ${esc(d.client?.name)}, ${esc(d.event)}</span>`;
 // Ação principal da linha, conforme o próximo passo provável; as demais ficam no menu "⋯".
 function primaryAction(d, status) {
   const ctx = rowContext(d),
     contract = d.type === "quote" ? contractFor(d) : null;
-  if (d.archived) return `<button type="button" data-restore="${d.id}">Restaurar${ctx}</button>`;
-  if (contract) return `<a class="btn" href="${docHref(contract)}">Ver contrato${ctx}</a>`;
-  if (status === "draft") return `<button type="button" class="soft" data-send="${d.id}">Enviar${ctx}</button>`;
+  if (d.archived)
+    return `<button type="button" data-restore="${d.id}">Restaurar${ctx}</button>`;
+  if (contract)
+    return `<a class="btn" href="${docHref(contract)}">Ver contrato${ctx}</a>`;
+  if (status === "draft")
+    return `<button type="button" class="soft" data-send="${d.id}">Enviar${ctx}</button>`;
   if (d.type === "quote" && ["sent", "approved"].includes(status))
     return `<button type="button" class="soft" data-convert="${d.id}">Gerar contrato${ctx}</button>`;
-  if (status === "expired") return `<button type="button" data-edit-doc="${d.id}">Editar${ctx}</button>`;
+  if (status === "expired")
+    return `<button type="button" data-edit-doc="${d.id}">Editar${ctx}</button>`;
   return `<button type="button" data-preview-pdf="${d.id}">PDF<span class="sr-only"> (abre em nova aba)</span>${ctx} <span aria-hidden="true">↗</span></button>`;
 }
 const menuButton = (d) =>
   `<button type="button" class="icon-button dots" data-menu="${d.id}" popovertarget="row-menu" aria-label="Mais ações: ${esc(d.client?.name)}, ${esc(d.event)}">${icon("more")}</button>`;
 function docRow({ doc: d, status }, { compact, numberCol }) {
   // Na versão compacta (painel e tela do cliente) a origem fica só na tela do documento.
-  const source = !compact && d.type === "contract" && d.sourceId ? findDoc(d.sourceId) : null;
+  const source =
+    !compact && d.type === "contract" && d.sourceId
+      ? findDoc(d.sourceId)
+      : null;
   return `<tr data-href="${docHref(d)}"><td><a class="row-link" href="${docHref(d)}">${esc(d.client?.name)}</a><small>${esc(d.event)}${compact ? ` · ${docKind(d)}` : ""} <span class="doc-number${numberCol ? " sub-num" : ""}">${esc(d.number || "")}</span></small>${source ? `<small>Gerado do orçamento <span class="doc-number">${esc(source.number)}</span></small>` : ""}</td>${numberCol ? `<td class="col-num"><span class="doc-number">${esc(d.number || "")}</span></td>` : ""}<td>${date(d.date)}</td><td>${money(d.total)}</td><td>${badge(d.archived ? "archived" : status)}${d.archived ? "" : validityNote(d, status)}</td><td><div class="rowactions">${primaryAction(d, status)}${menuButton(d)}</div></td></tr>`;
 }
 function docCard({ doc: d, status }) {
@@ -881,14 +1054,23 @@ function docCard({ doc: d, status }) {
 const clientHref = (c) => buildHash({ page: "clients", id: c.id });
 function clientTable() {
   const term = normalizeText(route.search);
-  const list = state.clients.filter((c) => normalizeText(`${c.name} ${c.email} ${c.phone}`).includes(term));
+  const list = state.clients.filter((c) =>
+    normalizeText(`${c.name} ${c.email} ${c.phone}`).includes(term),
+  );
   if (!list.length)
     return state.clients.length
       ? '<div class="empty"><h3>Nenhum cliente encontrado</h3><p>Nenhum resultado para a busca.</p><button type="button" data-action="clear-filters">Limpar busca</button></div>'
-      : empty("Conheça seu próximo cliente", "Cadastre nome, contato e os dados necessários para os documentos.", "client", "Cadastrar cliente");
+      : empty(
+          "Conheça seu próximo cliente",
+          "Cadastre nome, contato e os dados necessários para os documentos.",
+          "client",
+          "Cadastrar cliente",
+        );
   const count = (c) => {
     const n = docsOfClient(c).filter((d) => !d.archived).length;
-    return n ? `${n} ${n === 1 ? "documento" : "documentos"}` : "Nenhum documento";
+    return n
+      ? `${n} ${n === 1 ? "documento" : "documentos"}`
+      : "Nenhum documento";
   };
   const edit = (c) =>
     `<button type="button" data-edit-client="${c.id}">Editar<span class="sr-only"> ${esc(c.name)}</span></button>`;
@@ -897,7 +1079,9 @@ function clientTable() {
       (c) =>
         `<tr data-href="${clientHref(c)}"><td><a class="row-link" href="${clientHref(c)}">${esc(c.name)}</a></td><td>${esc(c.email)}</td><td>${esc(c.phone)}</td><td>${esc(c.document)}</td><td>${count(c)}</td><td>${edit(c)}</td></tr>`,
     )
-    .join("")}</tbody></table></div><ul class="doc-cards" aria-label="Clientes">${list
+    .join(
+      "",
+    )}</tbody></table></div><ul class="doc-cards" aria-label="Clientes">${list
     .map(
       (c) =>
         `<li class="doc-card" data-href="${clientHref(c)}"><div class="doc-card-head"><a class="row-link" href="${clientHref(c)}">${esc(c.name)}</a></div><p class="doc-card-sub">${esc([c.phone, c.email].filter(Boolean).join(" · ") || "Sem contato cadastrado")}</p><p class="doc-card-meta"><span>${count(c)}</span></p><div class="rowactions">${edit(c)}</div></li>`,
@@ -915,21 +1099,97 @@ function refreshList() {
     const kind = route.page === "quotes" ? "quote" : "contract",
       tabs = $(".status-tabs");
     list.innerHTML = docList(kind);
-    tabs?.replaceWith(document.createRange().createContextualFragment(tabsMarkup(kind)));
+    tabs?.replaceWith(
+      document.createRange().createContextualFragment(tabsMarkup(kind)),
+    );
   }
   const rows = $$("tbody tr", list).length,
     status = $("#results-status");
   if (status)
-    status.textContent = rows ? `${rows} ${rows === 1 ? "resultado" : "resultados"}` : "Nenhum resultado";
+    status.textContent = rows
+      ? `${rows} ${rows === 1 ? "resultado" : "resultados"}`
+      : "Nenhum resultado";
 }
 
 // ---------- Configurações ----------
 function settings() {
   const c = state.settings;
   return (
-    head("Configurações", "Dados da empresa, contato e cláusulas usados nos novos documentos.") +
-    `<section class="panel settings-panel"><div class="notice">As cláusulas foram adaptadas dos documentos enviados. Revise o texto com assessoria jurídica antes do uso. Alterações aqui valem para novos documentos; os já emitidos mantêm os dados registrados.</div><form id="settingsform" novalidate><div class="form-alerts"></div>${LEGEND}<div class="form-grid">${field("Empresa", "company", c.company, "text", true, false, { attrs: 'autocomplete="organization"' })}${field("Representante", "representative", c.representative, "text", false, false, { attrs: 'autocomplete="name"' })}${field("CNPJ", "cnpj", maskDocument(c.cnpj), "text", false, false, { attrs: 'data-mask="document" autocomplete="off"' })}${field("E-mail", "email", c.email, "email", false, false, { attrs: 'autocomplete="email"' })}${field("WhatsApp comercial", "phone", maskPhone(c.phone), "tel", true, false, { attrs: 'data-mask="phone" autocomplete="tel"', hint: "Aparece no orçamento para o cliente confirmar a contratação." })}${field("Chave PIX", "pix", c.pix, "text", false, false, { attrs: 'autocomplete="off"', hint: "Aparece no orçamento junto com as instruções para contratar." })}${field("Endereço", "address", c.address, "text", false, true, { attrs: 'autocomplete="street-address"' })}${field("Validade padrão dos orçamentos (dias)", "quoteValidityDays", c.quoteValidityDays ?? DEFAULT_VALIDITY_DAYS, "number", true, false, { attrs: 'min="1" max="365" step="1" inputmode="numeric"', hint: "Sugere a data de validade de cada novo orçamento." })}${area("Cláusulas padrão (editáveis)", "clauses", c.clauses, true, { attrs: 'rows="16"' })}</div><button type="submit" class="primary settings-save">Salvar configurações</button></form></section>`
+    head(
+      "Configurações",
+      "Dados da empresa, contato e cláusulas usados nos novos documentos.",
+    ) +
+    `<section class="panel settings-panel"><div class="notice">As cláusulas foram adaptadas dos documentos enviados. Revise o texto com assessoria jurídica antes do uso. Alterações aqui valem para novos documentos; os já emitidos mantêm os dados registrados.</div><form id="settingsform" novalidate><div class="form-alerts"></div>${LEGEND}<div class="form-grid">${field("Empresa", "company", c.company, "text", true, false, { attrs: 'autocomplete="organization"' })}${field("Representante", "representative", c.representative, "text", false, false, { attrs: 'autocomplete="name"' })}${field("CNPJ", "cnpj", maskDocument(c.cnpj), "text", false, false, { attrs: 'data-mask="document" autocomplete="off"' })}${field("E-mail", "email", c.email, "email", false, false, { attrs: 'autocomplete="email"' })}${field("WhatsApp comercial", "phone", maskPhone(c.phone), "tel", true, false, { attrs: 'data-mask="phone" autocomplete="tel"', hint: "Aparece no orçamento para o cliente confirmar a contratação." })}${field("Chave PIX", "pix", c.pix, "text", false, false, { attrs: 'autocomplete="off"', hint: "Aparece no orçamento junto com as instruções para contratar." })}${field("Endereço", "address", c.address, "text", false, true, { attrs: 'autocomplete="street-address"' })}${field("Validade padrão dos orçamentos (dias)", "quoteValidityDays", c.quoteValidityDays ?? DEFAULT_VALIDITY_DAYS, "number", true, false, { attrs: 'min="1" max="365" step="1" inputmode="numeric"', hint: "Sugere a data de validade de cada novo orçamento." })}${section("Logos dos PDFs")}<p class="hint full">Escolha uma logo para cada tipo de documento nesta conta. As imagens serão usadas nos novos documentos; os já emitidos preservam a logo registrada na criação. PNG, JPG ou ICO, até 5 MB.</p>${logoField("Logo dos orçamentos", "quoteLogoDataUrl", c.quoteLogoDataUrl, "/quote-assets/logo.jpg")}${logoField("Logo dos contratos", "contractLogoDataUrl", c.contractLogoDataUrl, "/quote-assets/logo-contrato.jpg")}${area("Cláusulas padrão (editáveis)", "clauses", c.clauses, true, { attrs: 'rows="16"' })}</div><button type="submit" class="primary settings-save">Salvar configurações</button></form></section>`
   );
+}
+function logoField(label, name, value, fallback) {
+  return `<div class="field logo-setting" data-logo-setting="${name}" data-logo-default="${fallback}"><label for="f-upload-${name}">${label}</label><div class="logo-preview"><img src="${esc(value || fallback)}" alt="Prévia: ${label.toLowerCase()}"></div><input type="hidden" id="f-${name}" name="${name}" value="${esc(value || "")}"><input class="logo-upload" id="f-upload-${name}" type="file" accept=".png,.jpg,.jpeg,.ico,image/png,image/jpeg,image/x-icon,image/vnd.microsoft.icon" aria-describedby="logo-status-${name} logo-error-${name}"><p class="hint logo-status" id="logo-status-${name}" role="status">${value ? "Logo personalizada nesta conta." : "Logo padrão do sistema."}</p><button type="button" data-reset-logo${value ? "" : " disabled"}>Usar logo padrão</button><p class="field-error" id="logo-error-${name}" role="alert"></p></div>`;
+}
+async function prepareLogo(file) {
+  if (file.size > 5 * 1024 * 1024)
+    throw Error("A imagem deve ter até 5 MB. Escolha um arquivo menor.");
+  if (
+    !/\.(png|jpe?g|ico)$/i.test(file.name) ||
+    ![
+      "",
+      "image/png",
+      "image/jpeg",
+      "image/x-icon",
+      "image/vnd.microsoft.icon",
+    ].includes(file.type)
+  )
+    throw Error("Escolha uma imagem PNG, JPG ou ICO.");
+  const url = URL.createObjectURL(file);
+  try {
+    const image = new Image();
+    await new Promise((resolve, reject) => {
+      image.onload = resolve;
+      image.onerror = () =>
+        reject(
+          Error(
+            "Não foi possível abrir essa imagem. Exporte a logo como PNG ou JPG e tente novamente.",
+          ),
+        );
+      image.src = url;
+    });
+    if (!image.naturalWidth || !image.naturalHeight)
+      throw Error("A imagem não possui dimensões válidas.");
+    const scale = Math.min(
+      1,
+      512 / Math.max(image.naturalWidth, image.naturalHeight),
+    );
+    const canvas = document.createElement("canvas");
+    canvas.width = Math.max(1, Math.round(image.naturalWidth * scale));
+    canvas.height = Math.max(1, Math.round(image.naturalHeight * scale));
+    const context = canvas.getContext("2d", { willReadFrequently: true });
+    if (!context)
+      throw Error(
+        "Seu navegador não conseguiu preparar a imagem. Tente novamente em outro navegador.",
+      );
+    context.drawImage(image, 0, 0, canvas.width, canvas.height);
+    const withinLimit = (data) => atob(data.split(",")[1]).length <= 256 * 1024;
+    let data = canvas.toDataURL("image/png");
+    if (withinLimit(data)) return data;
+    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+    let transparent = false;
+    for (let i = 3; i < pixels.length; i += 4) {
+      if (pixels[i] !== 255) {
+        transparent = true;
+        break;
+      }
+    }
+    if (!transparent) {
+      for (const quality of [0.92, 0.85, 0.75, 0.65]) {
+        data = canvas.toDataURL("image/jpeg", quality);
+        if (withinLimit(data)) return data;
+      }
+    }
+    throw Error(
+      "A imagem continua muito grande após o ajuste. Use uma logo mais simples ou menor, mantendo a transparência em PNG.",
+    );
+  } finally {
+    URL.revokeObjectURL(url);
+  }
 }
 function bindSettings() {
   const form = $("#settingsform");
@@ -937,10 +1197,58 @@ function bindSettings() {
   const initialState = comparable(form);
   pageGuard = () => comparable(form) !== initialState;
   const host = $(".form-alerts", form);
+  let pendingUploads = 0;
+  for (const card of $$("[data-logo-setting]", form)) {
+    const input = $("[type=file]", card),
+      value = $("[type=hidden]", card),
+      preview = $("img", card),
+      reset = $("[data-reset-logo]", card),
+      status = $(".logo-status", card),
+      error = $(".field-error", card);
+    reset.onclick = () => {
+      value.value = "";
+      input.value = "";
+      preview.src = card.dataset.logoDefault;
+      reset.disabled = true;
+      status.textContent =
+        "Logo padrão do sistema. Salve para aplicar aos novos documentos.";
+      error.textContent = "";
+    };
+    input.onchange = async () => {
+      const file = input.files[0];
+      if (!file) return;
+      pendingUploads++;
+      input.disabled = reset.disabled = true;
+      $('button[type="submit"]', form).disabled = true;
+      error.textContent = "";
+      status.textContent = "Preparando imagem…";
+      try {
+        const data = await prepareLogo(file);
+        value.value = data;
+        preview.src = data;
+        status.textContent =
+          "Logo personalizada pronta. Salve para aplicar aos novos documentos.";
+      } catch (cause) {
+        error.textContent =
+          cause.message ||
+          "Não foi possível preparar a imagem. Escolha outro arquivo.";
+        status.textContent = value.value
+          ? "A logo personalizada anterior foi preservada."
+          : "A logo padrão foi preservada.";
+      } finally {
+        pendingUploads--;
+        input.disabled = false;
+        input.value = "";
+        reset.disabled = !value.value;
+        $('button[type="submit"]', form).disabled = pendingUploads > 0;
+      }
+    };
+  }
   form.addEventListener("input", (event) => revalidate(event.target));
   form.addEventListener("change", (event) => revalidate(event.target));
   form.onsubmit = async (event) => {
     event.preventDefault();
+    if (pendingUploads) return;
     if (!validateForm(form, { host })) return;
     const button = $('button[type="submit"]', form);
     button.disabled = true;
@@ -950,6 +1258,8 @@ function bindSettings() {
       await api("/records/settings", {
         ...state.settings,
         ...values,
+        quoteLogoDataUrl: values.quoteLogoDataUrl || null,
+        contractLogoDataUrl: values.contractLogoDataUrl || null,
         quoteValidityDays: Number(values.quoteValidityDays),
         id: state.settings.id,
       });
@@ -958,7 +1268,11 @@ function bindSettings() {
       await load();
       toast("Configurações salvas.");
     } catch (error) {
-      showSummary(host, [{ message: error.message }], "Não foi possível salvar");
+      showSummary(
+        host,
+        [{ message: error.message }],
+        "Não foi possível salvar",
+      );
       button.disabled = false;
       button.textContent = "Salvar configurações";
     }
@@ -972,7 +1286,15 @@ function openModal(
   title,
   html,
   onSubmit,
-  { onSaved, submitLabel = "Salvar", draft = null, notice = "", dialog = modal, successMessage = "Salvo com sucesso.", legend = true } = {},
+  {
+    onSaved,
+    submitLabel = "Salvar",
+    draft = null,
+    notice = "",
+    dialog = modal,
+    successMessage = "Salvo com sucesso.",
+    legend = true,
+  } = {},
 ) {
   const returnFocus = focusSelector(document.activeElement),
     titleId = `${dialog.id}-title`;
@@ -985,7 +1307,10 @@ function openModal(
     if (!draft || forms.get(dialog) !== ctrl) return;
     try {
       if (ctrl.isDirty())
-        localStorage.setItem(draft, JSON.stringify({ savedAt: Date.now(), values: formValues(form) }));
+        localStorage.setItem(
+          draft,
+          JSON.stringify({ savedAt: Date.now(), values: formValues(form) }),
+        );
       else localStorage.removeItem(draft);
     } catch {}
   };
@@ -1029,7 +1354,10 @@ function openModal(
           saveDraftNow();
         } else ctrl.discardDraft();
         box.remove();
-        $(".form-grid input, .form-grid select, .form-grid textarea", form)?.focus();
+        $(
+          ".form-grid input, .form-grid select, .form-grid textarea",
+          form,
+        )?.focus();
       });
     },
   };
@@ -1055,7 +1383,13 @@ function openModal(
     saveDraftNow();
     forms.delete(dialog);
     if (draft)
-      setTimeout(() => toast("Formulário fechado. Suas alterações ficaram guardadas como rascunho neste navegador."), 0);
+      setTimeout(
+        () =>
+          toast(
+            "Formulário fechado. Suas alterações ficaram guardadas como rascunho neste navegador.",
+          ),
+        0,
+      );
   };
   dialog.onclose = () => {
     if (forms.get(dialog) === ctrl && !dialog.open) forms.delete(dialog);
@@ -1070,7 +1404,8 @@ function openModal(
   });
   form.onsubmit = async (event) => {
     event.preventDefault();
-    if (!validateForm(form, { host: alerts, extra: ctrl.extraValidation() })) return;
+    if (!validateForm(form, { host: alerts, extra: ctrl.extraValidation() }))
+      return;
     const button = $('button[type="submit"]', form),
       label = button.textContent;
     button.disabled = true;
@@ -1083,7 +1418,12 @@ function openModal(
       if (successMessage) toast(successMessage);
       onSaved?.(saved);
     } catch (error) {
-      if (dialog.open) showSummary(alerts, [{ message: error.message }], "Não foi possível salvar");
+      if (dialog.open)
+        showSummary(
+          alerts,
+          [{ message: error.message }],
+          "Não foi possível salvar",
+        );
       else toast(error.message, "error");
     } finally {
       button.disabled = false;
@@ -1097,21 +1437,47 @@ function openModal(
 function editClient(c = {}, onSaved, { notice = "", dialog = modal } = {}) {
   return openModal(
     c.id ? "Editar cliente" : "Novo cliente",
-    field("Nome completo", "name", c.name, "text", true, false, { attrs: 'autocomplete="off"' }) +
-      field("CPF / CNPJ", "document", maskDocument(c.document), "text", false, false, {
-        attrs: 'data-mask="document" autocomplete="off"',
-        hint: "Usado no contrato. Não aparece no orçamento.",
+    field("Nome completo", "name", c.name, "text", true, false, {
+      attrs: 'autocomplete="off"',
+    }) +
+      field(
+        "CPF / CNPJ",
+        "document",
+        maskDocument(c.document),
+        "text",
+        false,
+        false,
+        {
+          attrs: 'data-mask="document" autocomplete="off"',
+          hint: "Usado no contrato. Não aparece no orçamento.",
+        },
+      ) +
+      field("E-mail", "email", c.email, "email", false, false, {
+        attrs: 'autocomplete="off"',
       }) +
-      field("E-mail", "email", c.email, "email", false, false, { attrs: 'autocomplete="off"' }) +
-      field("Telefone / WhatsApp", "phone", maskPhone(c.phone), "tel", false, false, {
-        attrs: 'data-mask="phone" autocomplete="off"',
-      }) +
+      field(
+        "Telefone / WhatsApp",
+        "phone",
+        maskPhone(c.phone),
+        "tel",
+        false,
+        false,
+        {
+          attrs: 'data-mask="phone" autocomplete="off"',
+        },
+      ) +
       field("Endereço completo", "address", c.address, "text", false, true, {
         attrs: 'autocomplete="off"',
         hint: "Usado no contrato.",
       }),
     (b) => api("/records/clients", { ...b, id: c.id }),
-    { onSaved, submitLabel: "Salvar cliente", notice, dialog, successMessage: c.id ? "Cliente salvo." : "Cliente cadastrado." },
+    {
+      onSaved,
+      submitLabel: "Salvar cliente",
+      notice,
+      dialog,
+      successMessage: c.id ? "Cliente salvo." : "Cliente cadastrado.",
+    },
   );
 }
 function editProduct(p = {}) {
@@ -1126,12 +1492,20 @@ function editProduct(p = {}) {
         EQUIPMENT_CATEGORIES.map((c) => [c.id, c.label]),
         p.category || "other",
         true,
-        { full: true, hint: "Define em qual coluna do quadro de equipamentos o item é impresso." },
+        {
+          full: true,
+          hint: "Define em qual coluna do quadro de equipamentos o item é impresso.",
+        },
       ) +
       moneyField("Valor de referência", "price", p.price, false, {
         hint: "Opcional. Serve para somar os itens e comparar com o preço do pacote; não aparece nos documentos.",
       }),
-    (b) => api("/records/products", { ...b, id: p.id, price: parseMoney(b.price) ?? 0 }),
+    (b) =>
+      api("/records/products", {
+        ...b,
+        id: p.id,
+        price: parseMoney(b.price) ?? 0,
+      }),
     { submitLabel: "Salvar produto" },
   );
 }
@@ -1163,7 +1537,9 @@ function readItemRows(form) {
     const select = $("[data-item-product]", row),
       option = select.selectedOptions[0];
     return {
-      productId: /^\d+$/.test(select.value) ? Number(select.value) : null,
+      productId: /^\d+$/.test(option?.dataset.productId || select.value)
+        ? Number(option?.dataset.productId || select.value)
+        : null,
       name: option?.dataset.name || "",
       category: option?.dataset.category || "other",
       qty: Number($("[data-item-qty]", row).value) || 1,
@@ -1180,29 +1556,49 @@ function bindItems(ctrl, initial = []) {
     list = $("#items", form);
   if (!list) return { read: () => [], fill: () => {}, count: () => 0 };
   const options = (item) => {
-    const current = item?.productId == null ? null : state.products.find((p) => p.id === Number(item.productId));
+    const current =
+      item?.productId == null
+        ? null
+        : state.products.find((p) => p.id === Number(item.productId));
+    const useSnapshot =
+      Boolean(item?.name) &&
+      (!current ||
+        current.name !== item.name ||
+        (current.category || "other") !== (item.category || "other") ||
+        (Number(current.price) || 0) !== (Number(item.price) || 0));
     const out = state.products.map(
       (p) =>
-        `<option value="${p.id}" data-name="${esc(p.name)}" data-category="${esc(p.category || "other")}" data-price="${Number(p.price) || 0}"${current?.id === p.id ? " selected" : ""}>${esc(p.name)}</option>`,
+        `<option value="${p.id}" data-name="${esc(p.name)}" data-category="${esc(p.category || "other")}" data-price="${Number(p.price) || 0}"${!useSnapshot && current?.id === p.id ? " selected" : ""}>${esc(p.name)}</option>`,
     );
-    // Item gravado cujo produto saiu do catálogo: mantém o que está no documento.
-    if (item?.name && !current)
+    // Mantém os dados gravados até o usuário escolher explicitamente um produto.
+    if (useSnapshot)
       out.unshift(
-        `<option value="fora" data-name="${esc(item.name)}" data-category="${esc(item.category || "other")}" data-price="${Number(item.price) || 0}" selected>${esc(item.name)} (fora do catálogo)</option>`,
+        `<option value="snapshot" data-product-id="${esc(item.productId ?? "")}" data-name="${esc(item.name)}" data-category="${esc(item.category || "other")}" data-price="${Number(item.price) || 0}" selected>${esc(item.name)} (${current ? "dados gravados" : "fora do catálogo"})</option>`,
       );
     return out.join("");
   };
   const showCategory = (row) => {
     const option = $("[data-item-product]", row).selectedOptions[0];
-    $("[data-item-category]", row).textContent = option ? categoryLabel(option.dataset.category) : "";
+    $("[data-item-category]", row).textContent = option
+      ? categoryLabel(option.dataset.category)
+      : "";
   };
   const read = () => readItemRows(form);
   const refresh = () => {
     const rows = $$(".item-row", list);
     rows.forEach((row, i) => {
-      $("[data-item-product]", row).setAttribute("aria-label", `Produto do item ${i + 1}`);
-      $("[data-item-qty]", row).setAttribute("aria-label", `Quantidade do item ${i + 1}`);
-      $("[data-remove-item]", row).setAttribute("aria-label", `Remover o item ${i + 1}`);
+      $("[data-item-product]", row).setAttribute(
+        "aria-label",
+        `Produto do item ${i + 1}`,
+      );
+      $("[data-item-qty]", row).setAttribute(
+        "aria-label",
+        `Quantidade do item ${i + 1}`,
+      );
+      $("[data-remove-item]", row).setAttribute(
+        "aria-label",
+        `Remover o item ${i + 1}`,
+      );
     });
     $("#item-head", form).hidden = !rows.length;
     const total = itemsTotal(read());
@@ -1257,7 +1653,9 @@ function editPackage(p = {}) {
     field("Nome do pacote", "name", p.name, "text", true) +
       moneyField("Preço", "price", p.price, true) +
       area("Descrição", "description", p.description) +
-      itemsBlock("Monte o pacote com os produtos do catálogo. O quadro de cada item vem do cadastro do produto.") +
+      itemsBlock(
+        "Monte o pacote com os produtos do catálogo. O quadro de cada item vem do cadastro do produto.",
+      ) +
       area("Outros itens", "equipmentExtra", extra, true, {
         hint: "Uma linha por item, para o que não está no catálogo. Ex.: Transporte e montagem.",
       }),
@@ -1280,9 +1678,17 @@ function editPackage(p = {}) {
 // Sem clientes cadastrados, o próprio campo Cliente oferece o cadastro (sem sair do formulário).
 // Ficha do evento no PDF do contrato (formato do modelo da AOF). Todos opcionais.
 const CONTRACT_SHEET_FIELDS = [
-  ["referral", "Indicação", { hint: "Como o cliente chegou: Instagram, indicação de alguém…" }],
+  [
+    "referral",
+    "Indicação",
+    { hint: "Como o cliente chegou: Instagram, indicação de alguém…" },
+  ],
   ["contact2", "Segundo contato", { hint: "Ex.: (47) 99999-9999 - Noivo" }],
-  ["reception", "Recepção", { full: true, hint: "Local, horário e endereço da recepção." }],
+  [
+    "reception",
+    "Recepção",
+    { full: true, hint: "Local, horário e endereço da recepção." },
+  ],
   ["ceremonyPlace", "Local da cerimônia"],
   ["officiant", "Celebrante"],
   ["venueManager", "Gerente do espaço"],
@@ -1298,8 +1704,11 @@ function editDoc(type, d = {}, { notice = "", draftId } = {}) {
     isNew = !d.id,
     templates = state.quoteTemplates || QUOTE_TEMPLATES,
     // Novo orçamento começa sem modelo: local e preços do modelo só entram por escolha explícita.
-    template = isQuote ? templates.find((t) => t.id === d.templateId) : undefined,
-    initialOffer = template?.offers.find((o) => o.id === d.offerId) || template?.offers[0],
+    template = isQuote
+      ? templates.find((t) => t.id === d.templateId)
+      : undefined,
+    initialOffer =
+      template?.offers.find((o) => o.id === d.offerId) || template?.offers[0],
     p = state.packages[0] || {};
   const cardTerms = (price, count) =>
     price != null && count > 0
@@ -1309,11 +1718,11 @@ function editDoc(type, d = {}, { notice = "", draftId } = {}) {
     offer.id === "complete"
       ? "À vista: parcela única na assinatura. Boleto: condições a combinar, com quitação até 10 dias antes do evento."
       : "Condições de pagamento a combinar.";
-  const templateDefaults = (t, offer) => ({
+  const templateDefaults = (t, offer, eventType) => ({
     templateId: t.id,
     offerId: offer.id,
-    quoteHeadline: t.headline,
-    introduction: t.introduction,
+    quoteHeadline: getEventType(eventType)?.headline || t.headline,
+    introduction: getEventType(eventType)?.introduction || t.introduction,
     venue: t.venue,
     packageId: "",
     packageName: offer.name,
@@ -1332,15 +1741,20 @@ function editDoc(type, d = {}, { notice = "", draftId } = {}) {
     paymentNotes: offerPaymentNotes(offer),
     notes: [offer.description, t.reservationNotes].filter(Boolean).join("\n\n"),
   });
-  const data = template && isNew ? { ...templateDefaults(template, initialOffer), ...d } : { ...d };
+  const data =
+    template && isNew
+      ? { ...templateDefaults(template, initialOffer, d.eventType), ...d }
+      : { ...d };
   // Documento novo herda os itens do pacote de referência; documento antigo, que
   // só tem a lista em texto, mostra esse texto como itens soltos, sem perder nada.
-  const initialItems = data.items ?? (isNew ? p.items : null) ?? [];
+  const initialItems =
+    data.items ?? (isNew && !template ? p.items : null) ?? [];
   const initialExtra =
     data.equipmentExtra ??
     (isNew ? p.equipmentExtra : null) ??
     (initialItems.length ? "" : (data.equipment ?? p.equipment ?? ""));
-  if (isQuote && isNew && !data.validUntil) data.validUntil = addDays(today(), validityDays());
+  if (isQuote && isNew && !data.validUntil)
+    data.validUntil = addDays(today(), validityDays());
   // Sem cliente pré-selecionado: a escolha é sempre explícita.
   const selectedClientId = d.clientId ?? d.client?.id ?? "";
   const num = (index) => String(isQuote ? index + 1 : index).padStart(2, "0");
@@ -1348,22 +1762,28 @@ function editDoc(type, d = {}, { notice = "", draftId } = {}) {
     ? `${section("01 · Modelo do orçamento")}${select(
         "Modelo visual",
         "templateId",
-        [["", "Personalizado (sem modelo)"], ...templates.map((t) => [t.id, t.name])],
+        [
+          ["", "Personalizado (sem modelo)"],
+          ...templates.map((t) => [t.id, t.name]),
+        ],
         template?.id || "",
         false,
-        { full: true, hint: "Os modelos trazem marca, foto da estrutura, local e condições comerciais. Todos os valores continuam editáveis." },
+        {
+          full: true,
+          hint: "Os modelos trazem marca, local e condições comerciais. O tipo de evento define a imagem. Todos os valores continuam editáveis.",
+        },
       )}<div class="quote-template-fields" id="quote-template-fields"${template ? "" : " hidden"}>${select(
         "Opção de serviço do modelo",
         "offerId",
         (template?.offers || []).map((o) => [o.id, o.name]),
         data.offerId || initialOffer?.id,
-      )}${field("Título da proposta", "quoteHeadline", data.quoteHeadline || template?.headline)}${area(
+      )}</div>${field("Título da proposta", "quoteHeadline", data.quoteHeadline ?? getEventType(data.eventType)?.headline ?? template?.headline)}${area(
         "Apresentação",
         "introduction",
-        data.introduction,
+        data.introduction ?? getEventType(data.eventType)?.introduction,
         true,
         { hint: "Personalize com os nomes, a data e o local do evento." },
-      )}</div>`
+      )}`
     : "";
   const quotePriceFields = isQuote
     ? `<div class="quote-template-fields" id="quote-price-fields"${template ? "" : " hidden"}>${moneyField("Valor à vista", "cashTotal", data.cashTotal, true)}${moneyField(
@@ -1372,10 +1792,18 @@ function editDoc(type, d = {}, { notice = "", draftId } = {}) {
         data.installmentTotal,
         false,
         { hint: "Opcional. Deixe em branco se não houver parcelamento." },
-      )}${field("Máximo de parcelas no cartão", "installmentCount", data.installmentCount ?? 0, "number", true, false, {
-        attrs: 'min="0" max="36" step="1" inputmode="numeric"',
-        hint: "Use 0 para parcelamento a combinar.",
-      })}${select(
+      )}${field(
+        "Máximo de parcelas no cartão",
+        "installmentCount",
+        data.installmentCount ?? 0,
+        "number",
+        true,
+        false,
+        {
+          attrs: 'min="0" max="36" step="1" inputmode="numeric"',
+          hint: "Use 0 para parcelamento a combinar.",
+        },
+      )}${select(
         "Condição escolhida para este orçamento",
         "paymentChoice",
         [
@@ -1389,16 +1817,42 @@ function editDoc(type, d = {}, { notice = "", draftId } = {}) {
   // Recolhida quando vazia, para não alongar o formulário de quem não usa.
   const sheetFields =
     type === "contract"
-      ? `<div class="field full"><details class="more-fields" id="more-fields"${CONTRACT_SHEET_FIELDS.some(([name]) => data[name]) ? " open" : ""}><summary>Ficha do evento no contrato <span class="optional">(opcional)</span></summary><p class="hint">Indicação, recepção, cerimônia e equipe do evento aparecem na tabela do contrato. O que ficar vazio sai em branco no PDF.</p><div class="form-grid">${CONTRACT_SHEET_FIELDS.map(([name, label, opts = {}]) =>
-          field(label, name, data[name] ?? "", "text", false, Boolean(opts.full), { attrs: 'autocomplete="off"', hint: opts.hint || "" }),
+      ? `<div class="field full"><details class="more-fields" id="more-fields"${CONTRACT_SHEET_FIELDS.some(([name]) => data[name]) ? " open" : ""}><summary>Ficha do evento no contrato <span class="optional">(opcional)</span></summary><p class="hint">Indicação, recepção, cerimônia e equipe do evento aparecem na tabela do contrato. O que ficar vazio sai em branco no PDF.</p><div class="form-grid">${CONTRACT_SHEET_FIELDS.map(
+          ([name, label, opts = {}]) =>
+            field(
+              label,
+              name,
+              data[name] ?? "",
+              "text",
+              false,
+              Boolean(opts.full),
+              { attrs: 'autocomplete="off"', hint: opts.hint || "" },
+            ),
         ).join("")}</div></details></div>`
       : "";
   const html = `${quoteFields}${section(`${num(1)} · Cliente e evento`)}${clientCombo(selectedClientId, d.client)}${select(
     "Situação",
     "status",
-    Object.entries(statuses).filter(([v]) => type === "contract" || v !== "signed"),
+    Object.entries(statuses).filter(
+      ([v]) => type === "contract" || v !== "signed",
+    ),
     d.status || "draft",
-  )}${field("Nome do evento", "event", data.event, "text", true)}${field("Data do evento", "date", data.date, "date", true)}${field(
+  )}${select(
+    "Tipo de evento",
+    "eventType",
+    [
+      ["", isNew ? "Selecione o tipo de evento" : "Não informado"],
+      ...EVENT_TYPES.map((event) => [event.id, event.label]),
+    ],
+    data.eventType || "",
+    isNew,
+    {
+      full: true,
+      hint: isQuote
+        ? "A imagem do orçamento acompanha o tipo escolhido. Serviços e valores permanecem editáveis."
+        : "Identifica a categoria deste evento.",
+    },
+  )}${isQuote ? '<figure class="event-image-preview field full" id="event-image-preview" hidden><img alt=""><figcaption><strong data-event-image-title></strong><span data-event-image-caption></span></figcaption></figure>' : ""}${field("Nome do evento", "event", data.event, "text", true)}${field("Data do evento", "date", data.date, "date", true)}${field(
     "Local / endereço do evento",
     "venue",
     data.venue,
@@ -1429,17 +1883,31 @@ function editDoc(type, d = {}, { notice = "", draftId } = {}) {
     data.extraHour ?? 500,
   )}${
     isQuote
-      ? field("Validade do orçamento", "validUntil", data.validUntil, "date", true, false, {
-          hint: "Depois desta data, o orçamento aparece como Vencido.",
-        })
+      ? field(
+          "Validade do orçamento",
+          "validUntil",
+          data.validUntil,
+          "date",
+          true,
+          false,
+          {
+            hint: "Depois desta data, o orçamento aparece como Vencido.",
+          },
+        )
       : ""
   }${paymentsBlock}${area("Forma de pagamento e condições", "paymentNotes", data.paymentNotes ?? "Pagamento via PIX ou dinheiro.")}${section(
     `${num(3)} · Condições do documento`,
   )}${
     type === "contract"
-      ? area("Cláusulas contratuais (revise antes de emitir)", "clauses", data.clauses ?? state.settings.clauses, true, {
-          attrs: 'rows="16"',
-        })
+      ? area(
+          "Cláusulas contratuais (revise antes de emitir)",
+          "clauses",
+          data.clauses ?? state.settings.clauses,
+          true,
+          {
+            attrs: 'rows="16"',
+          },
+        )
       : ""
   }${
     type === "contract"
@@ -1459,17 +1927,23 @@ function editDoc(type, d = {}, { notice = "", draftId } = {}) {
       const number = parseMoney(value);
       return number == null || Number.isNaN(number) ? null : number;
     };
-    const optionalNumber = (value) => (value == null || value === "" ? null : Number(value));
-    const selectedTemplate = isQuote && templates.find((t) => t.id === b.templateId);
+    const optionalNumber = (value) =>
+      value == null || value === "" ? null : Number(value);
+    const selectedTemplate =
+      isQuote && templates.find((t) => t.id === b.templateId);
     const quoteValues = isQuote
       ? {
           templateId: selectedTemplate?.id || null,
           offerId: selectedTemplate ? b.offerId || null : null,
-          quoteHeadline: selectedTemplate ? b.quoteHeadline?.trim() || null : null,
-          introduction: selectedTemplate ? b.introduction?.trim() || null : null,
+          quoteHeadline: b.quoteHeadline?.trim() || null,
+          introduction: b.introduction?.trim() || null,
           cashTotal: selectedTemplate ? optionalMoney(b.cashTotal) : null,
-          installmentTotal: selectedTemplate ? optionalMoney(b.installmentTotal) : null,
-          installmentCount: selectedTemplate ? optionalNumber(b.installmentCount) : null,
+          installmentTotal: selectedTemplate
+            ? optionalMoney(b.installmentTotal)
+            : null,
+          installmentCount: selectedTemplate
+            ? optionalNumber(b.installmentCount)
+            : null,
           paymentChoice: selectedTemplate ? b.paymentChoice : null,
           cardTerms: selectedTemplate ? b.cardTerms?.trim() || null : null,
         }
@@ -1477,12 +1951,20 @@ function editDoc(type, d = {}, { notice = "", draftId } = {}) {
     let total = optionalMoney(b.total);
     if (selectedTemplate) {
       total =
-        quoteValues.paymentChoice === "installments" ? quoteValues.installmentTotal : quoteValues.cashTotal;
-      if (total == null) throw Error("Informe o valor da condição de pagamento escolhida.");
+        quoteValues.paymentChoice === "installments"
+          ? quoteValues.installmentTotal
+          : quoteValues.cashTotal;
+      if (total == null)
+        throw Error("Informe o valor da condição de pagamento escolhida.");
     }
     const sheetValues =
       type === "contract"
-        ? Object.fromEntries(CONTRACT_SHEET_FIELDS.map(([name]) => [name, String(b[name] ?? "").trim()]))
+        ? Object.fromEntries(
+            CONTRACT_SHEET_FIELDS.map(([name]) => [
+              name,
+              String(b[name] ?? "").trim(),
+            ]),
+          )
         : {};
     // A lista em texto continua gravada para o orçamento e as telas; os itens
     // guardam o quadro de cada produto, que o contrato imprime sem adivinhar.
@@ -1496,6 +1978,7 @@ function editDoc(type, d = {}, { notice = "", draftId } = {}) {
       ...sheetValues,
       id: d.id,
       type,
+      eventType: b.eventType || null,
       client: { ...client },
       total: total ?? 0,
       extraHour: optionalMoney(b.extraHour) ?? 0,
@@ -1507,11 +1990,16 @@ function editDoc(type, d = {}, { notice = "", draftId } = {}) {
       payments,
     });
   };
-  const ctrl = openModal(`${isNew ? "Novo" : "Editar"} ${isQuote ? "orçamento" : "contrato"}`, html, onSubmit, {
-    submitLabel: `Salvar ${isQuote ? "orçamento" : "contrato"}`,
-    draft: draftKey(type, draftId ?? d.id),
-    notice,
-  });
+  const ctrl = openModal(
+    `${isNew ? "Novo" : "Editar"} ${isQuote ? "orçamento" : "contrato"}`,
+    html,
+    onSubmit,
+    {
+      submitLabel: `Salvar ${isQuote ? "orçamento" : "contrato"}`,
+      draft: draftKey(type, draftId ?? d.id),
+      notice,
+    },
+  );
   const combo = bindClientCombo(ctrl, d.client);
   const form = ctrl.form,
     paymentList = $("#payments", form),
@@ -1519,7 +2007,9 @@ function editDoc(type, d = {}, { notice = "", draftId } = {}) {
   const setValue = (name, value) => {
     const el = input(name);
     if (!el) return;
-    el.value = el.matches("[data-money]") ? formatMoneyInput(value) : (value ?? "");
+    el.value = el.matches("[data-money]")
+      ? formatMoneyInput(value)
+      : (value ?? "");
   };
   const moneyValue = (name) => {
     const value = parseMoney(input(name)?.value);
@@ -1534,9 +2024,18 @@ function editDoc(type, d = {}, { notice = "", draftId } = {}) {
   const renumberPayments = () => {
     const rows = $$(".payment-row", paymentList);
     rows.forEach((row, i) => {
-      $('[type="date"]', row).setAttribute("aria-label", `Vencimento da parcela ${i + 1}`);
-      $("[data-money]", row).setAttribute("aria-label", `Valor da parcela ${i + 1} em reais`);
-      $("[data-remove-payment]", row).setAttribute("aria-label", `Remover parcela ${i + 1}`);
+      $('[type="date"]', row).setAttribute(
+        "aria-label",
+        `Vencimento da parcela ${i + 1}`,
+      );
+      $("[data-money]", row).setAttribute(
+        "aria-label",
+        `Valor da parcela ${i + 1} em reais`,
+      );
+      $("[data-remove-payment]", row).setAttribute(
+        "aria-label",
+        `Remover parcela ${i + 1}`,
+      );
     });
     $("#payment-head", form).hidden = !rows.length;
     $("#splitpayments", form).hidden = !rows.length;
@@ -1551,7 +2050,10 @@ function editDoc(type, d = {}, { notice = "", draftId } = {}) {
       return;
     }
     const total = moneyValue("total");
-    const sum = rows.reduce((s, row) => s + (parseMoney($("[data-money]", row).value) || 0), 0);
+    const sum = rows.reduce(
+      (s, row) => s + (parseMoney($("[data-money]", row).value) || 0),
+      0,
+    );
     if (total == null) {
       out.textContent = `Soma das parcelas: ${money(sum)}. Informe o valor total do documento.`;
       return;
@@ -1586,7 +2088,8 @@ function editDoc(type, d = {}, { notice = "", draftId } = {}) {
     const button = event.target.closest("[data-remove-payment]");
     if (!button) return;
     clearPaymentError();
-    for (const invalid of $$("[data-error-id]", button.closest(".payment-row"))) clearError(invalid);
+    for (const invalid of $$("[data-error-id]", button.closest(".payment-row")))
+      clearError(invalid);
     button.closest(".payment-row").remove();
     renumberPayments();
     updatePaymentSum();
@@ -1600,14 +2103,18 @@ function editDoc(type, d = {}, { notice = "", draftId } = {}) {
       total = moneyValue("total");
     if (!rows.length) return;
     if (total == null) {
-      showError({ el: input("total"), message: "Informe o valor total antes de distribuir as parcelas." });
+      showError({
+        el: input("total"),
+        message: "Informe o valor total antes de distribuir as parcelas.",
+      });
       input("total").focus();
       return;
     }
     splitAmount(total, rows.length).forEach((value, i) => {
       const amount = $("[data-money]", rows[i]);
       amount.value = formatMoneyInput(value);
-      if (amount.dataset.errorId && !amount.dataset.groupError) clearError(amount);
+      if (amount.dataset.errorId && !amount.dataset.groupError)
+        clearError(amount);
     });
     updatePaymentSum();
     ctrl.changed();
@@ -1639,7 +2146,11 @@ function editDoc(type, d = {}, { notice = "", draftId } = {}) {
     setValue("total", pk.price);
     // Pacote antigo sem itens: a lista em texto vai para os itens soltos.
     items.fill(pk.items || []);
-    setValue("equipmentExtra", pk.equipmentExtra ?? ((pk.items || []).length ? "" : (pk.equipment ?? "")));
+    setValue(
+      "equipmentExtra",
+      pk.equipmentExtra ??
+        ((pk.items || []).length ? "" : (pk.equipment ?? "")),
+    );
     updatePaymentSum();
   };
 
@@ -1650,56 +2161,122 @@ function editDoc(type, d = {}, { notice = "", draftId } = {}) {
         .map((o) => `<option value="${esc(o.id)}">${esc(o.name)}</option>`)
         .join("");
   };
+  const updateEventPreview = () => {
+    if (!isQuote) return;
+    const selectedEvent = getEventType(input("eventType").value);
+    const preview = $("#event-image-preview", form);
+    preview.hidden = !selectedEvent;
+    if (!selectedEvent) return;
+    const image = $("img", preview);
+    image.src = `/${selectedEvent.imagePath.replace(/^public\//, "")}`;
+    image.alt = `Imagem ilustrativa para ${selectedEvent.label.toLowerCase()}`;
+    $("[data-event-image-title]", preview).textContent = selectedEvent.label;
+    $("[data-event-image-caption]", preview).textContent =
+      selectedEvent.imageCaption;
+  };
+  // Apenas textos sugeridos acompanham a troca de categoria ou modelo.
+  // Uma apresentação personalizada pelo usuário continua intacta.
+  const applyPresentation = (suggestion) => {
+    if (!isQuote || !suggestion) return;
+    for (const [field, property] of [
+      ["quoteHeadline", "headline"],
+      ["introduction", "introduction"],
+    ]) {
+      const current = input(field).value.trim();
+      const standard = [...EVENT_TYPES, ...templates].some(
+        (item) => item[property] === current,
+      );
+      if (!current || standard) setValue(field, suggestion[property]);
+    }
+  };
+  input("eventType").onchange = () => {
+    updateEventPreview();
+    applyPresentation(
+      getEventType(input("eventType").value) ||
+        templates.find((t) => t.id === input("templateId")?.value),
+    );
+  };
   let updatePrice = updatePaymentSum;
   if (isQuote) {
-    const intValue = (name) => (input(name).value === "" ? null : Number(input(name).value));
+    const intValue = (name) =>
+      input(name).value === "" ? null : Number(input(name).value);
     updatePrice = (updateCard = false) => {
       const active = Boolean(input("templateId").value);
       $("#quote-template-fields", form).hidden = !active;
       $("#quote-price-fields", form).hidden = !active;
       for (const id of ["quote-template-fields", "quote-price-fields"])
-        $$(`#${id} input, #${id} select, #${id} textarea`, form).forEach((el) => (el.disabled = !active));
+        $$(`#${id} input, #${id} select, #${id} textarea`, form).forEach(
+          (el) => (el.disabled = !active),
+        );
       input("packageId").disabled = active;
       input("total").readOnly = active;
       const hasInstallments = moneyValue("installmentTotal") !== null;
-      $('[value="installments"]', input("paymentChoice")).disabled = !hasInstallments;
+      $('[value="installments"]', input("paymentChoice")).disabled =
+        !hasInstallments;
       if (!hasInstallments) input("paymentChoice").value = "cash";
       if (active) {
         const selectedPrice = moneyValue(
-          input("paymentChoice").value === "installments" ? "installmentTotal" : "cashTotal",
+          input("paymentChoice").value === "installments"
+            ? "installmentTotal"
+            : "cashTotal",
         );
         setValue("total", selectedPrice ?? "");
         if (updateCard)
           setValue(
             "cardTerms",
-            hasInstallments ? cardTerms(moneyValue("installmentTotal"), intValue("installmentCount") || 0) : "",
+            hasInstallments
+              ? cardTerms(
+                  moneyValue("installmentTotal"),
+                  intValue("installmentCount") || 0,
+                )
+              : "",
           );
       }
       const boletoDate = dateBeforeEvent(input("date").value);
-      $("#quote-payment-helper", form).textContent = `O total do documento acompanha a condição escolhida. ${boletoDate ? `Boleto: vencimento até ${date(boletoDate)}, 10 dias antes do evento.` : "Defina a data do evento para calcular o vencimento do boleto (10 dias antes)."}`;
+      $("#quote-payment-helper", form).textContent =
+        `O total do documento acompanha a condição escolhida. ${boletoDate ? `Boleto: vencimento até ${date(boletoDate)}, 10 dias antes do evento.` : "Defina a data do evento para calcular o vencimento do boleto (10 dias antes)."}`;
       updatePaymentSum();
     };
     input("templateId").onchange = () => {
-      const selected = templates.find((t) => t.id === input("templateId").value);
+      const selected = templates.find(
+        (t) => t.id === input("templateId").value,
+      );
       fillOffers(selected);
-      if (selected)
-        for (const [name, value] of Object.entries(templateDefaults(selected, selected.offers[0])))
-          setValue(name, value);
+      items.fill([]);
+      if (selected) {
+        for (const [name, value] of Object.entries(
+          templateDefaults(selected, selected.offers[0], input("eventType").value),
+        )) {
+          if (name !== "quoteHeadline" && name !== "introduction")
+            setValue(name, value);
+        }
+        applyPresentation(getEventType(input("eventType").value) || selected);
+      }
       updatePrice();
     };
     input("offerId").onchange = () => {
-      const selected = templates.find((t) => t.id === input("templateId").value);
-      const offer = selected?.offers.find((o) => o.id === input("offerId").value);
+      const selected = templates.find(
+        (t) => t.id === input("templateId").value,
+      );
+      const offer = selected?.offers.find(
+        (o) => o.id === input("offerId").value,
+      );
       if (!offer) return;
+      items.fill([]);
       for (const [name, value] of Object.entries({
         packageName: offer.name,
         equipmentExtra: offer.equipment,
         cashTotal: offer.cashPrice,
         installmentTotal: offer.installmentPrice,
         installmentCount: offer.installmentCount,
-        cardTerms: offer.installmentPrice == null ? "" : cardTerms(offer.installmentPrice, offer.installmentCount),
+        cardTerms:
+          offer.installmentPrice == null
+            ? ""
+            : cardTerms(offer.installmentPrice, offer.installmentCount),
         paymentNotes: offerPaymentNotes(offer),
-        notes: [offer.description, selected.reservationNotes].filter(Boolean).join("\n\n"),
+        notes: [offer.description, selected.reservationNotes]
+          .filter(Boolean)
+          .join("\n\n"),
       }))
         setValue(name, value);
       updatePrice();
@@ -1723,15 +2300,22 @@ function editDoc(type, d = {}, { notice = "", draftId } = {}) {
       else el.value = value;
     }
     paymentList.innerHTML = "";
-    for (const [dateValue, amount] of values.__payments || []) addPayment({ date: dateValue, amount });
+    for (const [dateValue, amount] of values.__payments || [])
+      addPayment({ date: dateValue, amount });
     if (values.__items) items.fill(values.__items);
     const sheet = $("#more-fields", form);
-    if (sheet && CONTRACT_SHEET_FIELDS.some(([name]) => input(name)?.value.trim())) sheet.open = true;
+    if (
+      sheet &&
+      CONTRACT_SHEET_FIELDS.some(([name]) => input(name)?.value.trim())
+    )
+      sheet.open = true;
     combo.syncLabel();
+    updateEventPreview();
     updatePrice();
   };
 
   for (const payment of data.payments || []) addPayment(payment);
+  updateEventPreview();
   updatePrice();
   ctrl.markPristine();
   ctrl.offerDraft(fillForm);
@@ -1756,7 +2340,9 @@ function bindClientCombo(ctrl, snapshot) {
     active = -1;
   const labelFor = (id) =>
     findClient(id)?.name ??
-    (snapshot && id !== "" && String(snapshot.id ?? id) === String(id) ? `${snapshot.name} (dados do documento)` : "");
+    (snapshot && id !== "" && String(snapshot.id ?? id) === String(id)
+      ? `${snapshot.name} (dados do documento)`
+      : "");
   const close = () => {
     list.hidden = true;
     box.setAttribute("aria-expanded", "false");
@@ -1765,7 +2351,9 @@ function bindClientCombo(ctrl, snapshot) {
   };
   const highlight = (index) => {
     active = index;
-    [...list.children].forEach((li, i) => li.classList.toggle("active", i === index));
+    [...list.children].forEach((li, i) =>
+      li.classList.toggle("active", i === index),
+    );
     const li = list.children[index];
     if (li) {
       box.setAttribute("aria-activedescendant", li.id);
@@ -1776,11 +2364,24 @@ function bindClientCombo(ctrl, snapshot) {
     const query = normalizeText(box.value),
       typed = box.value.trim();
     const matches = state.clients
-      .filter((c) => !query || normalizeText(`${c.name} ${c.email} ${c.phone}`).includes(query))
+      .filter(
+        (c) =>
+          !query ||
+          normalizeText(`${c.name} ${c.email} ${c.phone}`).includes(query),
+      )
       .slice(0, 8);
     options = [
-      ...matches.map((c) => ({ id: c.id, label: c.name, sub: [c.phone, c.email].filter(Boolean).join(" · ") })),
-      { create: true, label: typed ? `Cadastrar “${typed}” como novo cliente` : "Cadastrar novo cliente" },
+      ...matches.map((c) => ({
+        id: c.id,
+        label: c.name,
+        sub: [c.phone, c.email].filter(Boolean).join(" · "),
+      })),
+      {
+        create: true,
+        label: typed
+          ? `Cadastrar “${typed}” como novo cliente`
+          : "Cadastrar novo cliente",
+      },
     ];
     list.innerHTML = options
       .map(
@@ -1800,14 +2401,18 @@ function bindClientCombo(ctrl, snapshot) {
   };
   // Cadastro em um segundo diálogo, por cima do orçamento, que continua aberto.
   const create = (name) =>
-    editClient({ name }, (client) => {
-      if (client?.id) select({ id: client.id, name: client.name });
-      box.focus();
-    }, { dialog: subdialog });
+    editClient(
+      { name },
+      (client) => {
+        if (client?.id) select({ id: client.id, name: client.name });
+        box.focus();
+      },
+      { dialog: subdialog },
+    );
   const choose = (option) => {
     close();
     if (option.create) create(box.value.trim());
-    else select(option);
+    else select({ id: option.id, name: option.label });
   };
   box.addEventListener("input", () => {
     if (box.value !== labelFor(hidden.value)) hidden.value = "";
@@ -1820,7 +2425,9 @@ function bindClientCombo(ctrl, snapshot) {
       event.preventDefault();
       if (list.hidden) open();
       const n = options.length;
-      highlight(event.key === "ArrowDown" ? (active + 1) % n : (active - 1 + n) % n);
+      highlight(
+        event.key === "ArrowDown" ? (active + 1) % n : (active - 1 + n) % n,
+      );
     } else if (event.key === "Enter" && !list.hidden && active >= 0) {
       event.preventDefault();
       choose(options[active]);
@@ -1836,7 +2443,11 @@ function bindClientCombo(ctrl, snapshot) {
       if (document.activeElement === box) return;
       close();
       // Nome digitado igual ao de um cliente cadastrado: seleciona sem exigir clique.
-      const exact = !hidden.value && state.clients.find((c) => normalizeText(c.name) === normalizeText(box.value));
+      const exact =
+        !hidden.value &&
+        state.clients.find(
+          (c) => normalizeText(c.name) === normalizeText(box.value),
+        );
       if (exact) select(exact);
     }, 150),
   );
@@ -1881,7 +2492,8 @@ const dl = (rows) =>
     .filter(([, value]) => value !== "" && value != null)
     .map(([term, value]) => `<div><dt>${term}</dt><dd>${value}</dd></div>`)
     .join("")}</dl>`;
-const panel = (title, body, cls = "") => `<section class="panel detail-panel${cls ? ` ${cls}` : ""}"><h2>${title}</h2>${body}</section>`;
+const panel = (title, body, cls = "") =>
+  `<section class="panel detail-panel${cls ? ` ${cls}` : ""}"><h2>${title}</h2>${body}</section>`;
 function docDetail(d) {
   const isQuote = d.type === "quote",
     status = displayStatus(d),
@@ -1898,12 +2510,20 @@ function docDetail(d) {
   const payments = (d.payments || []).length
     ? `<ul class="plain-list">${d.payments.map((p, i) => `<li><span>${i + 1}ª parcela · ${date(p.date)}</span><strong>${money(p.amount)}</strong></li>`).join("")}</ul>`
     : "";
-  const choice = d.templateId && d.paymentChoice ? (d.paymentChoice === "installments" ? "Parcelado" : "À vista") : "";
+  const choice =
+    d.templateId && d.paymentChoice
+      ? d.paymentChoice === "installments"
+        ? "Parcelado"
+        : "À vista"
+      : "";
   const values = panel(
     "Valores e pagamento",
     `<p class="detail-total">${money(d.total)}</p>${dl([
       ["Condição escolhida", choice],
-      ["Cartão", d.paymentChoice === "installments" ? esc(d.cardTerms || "") : ""],
+      [
+        "Cartão",
+        d.paymentChoice === "installments" ? esc(d.cardTerms || "") : "",
+      ],
       ["Hora adicional", Number(d.extraHour) > 0 ? money(d.extraHour) : ""],
       ["Validade", isQuote && d.validUntil ? date(d.validUntil) : ""],
       ["Forma de pagamento", esc(d.paymentNotes || "")],
@@ -1912,6 +2532,7 @@ function docDetail(d) {
   const event = panel(
     "Evento",
     dl([
+      ["Tipo de evento", esc(getEventType(d.eventType)?.label || "")],
       ["Data", date(d.date)],
       ["Local", esc(d.venue || "A definir")],
       ["Convidados", esc(d.guests || "")],
@@ -1919,23 +2540,43 @@ function docDetail(d) {
       ["Cerimônia", esc(d.ceremony || "")],
       ["Início", esc(d.start || "")],
       ["Término", esc(d.end || "")],
-      ...(isQuote ? [] : CONTRACT_SHEET_FIELDS.map(([name, label]) => [label, esc(d[name] || "")])),
+      ...(isQuote
+        ? []
+        : CONTRACT_SHEET_FIELDS.map(([name, label]) => [
+            label,
+            esc(d[name] || ""),
+          ])),
     ]),
   );
   const who = panel(
     "Cliente",
     dl([
-      ["Nome", client ? `<a href="${clientHref(client)}">${esc(client.name)}</a>` : esc(snap.name)],
+      [
+        "Nome",
+        client
+          ? `<a href="${clientHref(client)}">${esc(client.name)}</a>`
+          : esc(snap.name),
+      ],
       ["WhatsApp", esc(snap.phone || "")],
-      ["E-mail", snap.email ? `<a href="mailto:${esc(snap.email)}">${esc(snap.email)}</a>` : ""],
+      [
+        "E-mail",
+        snap.email
+          ? `<a href="mailto:${esc(snap.email)}">${esc(snap.email)}</a>`
+          : "",
+      ],
       ["CPF / CNPJ", esc(snap.document || "")],
       ["Endereço", esc(snap.address || "")],
-    ]) + (client ? "" : '<p class="hint">Cadastro do cliente não encontrado; dados registrados na emissão.</p>'),
+    ]) +
+      (client
+        ? ""
+        : '<p class="hint">Cadastro do cliente não encontrado; dados registrados na emissão.</p>'),
   );
   // Com itens do catálogo, mostra agrupado pelo quadro do contrato, para conferir
   // antes de emitir se cada coisa vai sair na coluna certa.
   const grouped = (d.items || []).length
-    ? EQUIPMENT_CATEGORIES.filter((c) => d.items.some((i) => i.category === c.id))
+    ? EQUIPMENT_CATEGORIES.filter((c) =>
+        d.items.some((i) => i.category === c.id),
+      )
         .map(
           (c) =>
             `<div class="service-group"><h3>${esc(c.label)}</h3><ul class="plain-list bullets">${d.items
@@ -1945,9 +2586,19 @@ function docDetail(d) {
         )
         .join("") +
       (d.equipmentExtra
-        ? `<div class="service-group"><h3>Outros itens</h3><ul class="plain-list bullets">${String(d.equipmentExtra).split("\n").filter(Boolean).map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>`
+        ? `<div class="service-group"><h3>Outros itens</h3><ul class="plain-list bullets">${String(
+            d.equipmentExtra,
+          )
+            .split("\n")
+            .filter(Boolean)
+            .map((x) => `<li>${esc(x)}</li>`)
+            .join("")}</ul></div>`
         : "")
-    : `<ul class="plain-list bullets">${String(d.equipment || "").split("\n").filter(Boolean).map((x) => `<li>${esc(x)}</li>`).join("")}</ul>`;
+    : `<ul class="plain-list bullets">${String(d.equipment || "")
+        .split("\n")
+        .filter(Boolean)
+        .map((x) => `<li>${esc(x)}</li>`)
+        .join("")}</ul>`;
   const services = panel(
     "Serviços",
     `<p class="detail-strong">${esc(d.packageName || "")}</p>${grouped}${d.notes ? `<p class="detail-notes">${esc(d.notes)}</p>` : ""}`,
@@ -1959,10 +2610,19 @@ function docDetail(d) {
     : source
       ? `<p>Gerado do orçamento <a href="${docHref(source)}"><span class="doc-number">${esc(source.number)}</span></a>.</p>`
       : "<p>Contrato criado sem orçamento de origem.</p>";
-  const timeline = `<ol class="timeline">${historyEvents(d).map((e) => `<li><time datetime="${esc(e.at)}">${dateTime(e.at)}</time><span>${esc(e.text)}</span></li>`).join("")}</ol>`;
+  const timeline = `<ol class="timeline">${historyEvents(d)
+    .map(
+      (e) =>
+        `<li><time datetime="${esc(e.at)}">${dateTime(e.at)}</time><span>${esc(e.text)}</span></li>`,
+    )
+    .join("")}</ol>`;
   return {
     title: `${docKind(d)} ${d.number}`,
-    crumbs: [HOME, sectionCrumb(listPageFor(d.type)), { label: d.number || docKind(d) }],
+    crumbs: [
+      HOME,
+      sectionCrumb(listPageFor(d.type)),
+      { label: d.number || docKind(d) },
+    ],
     html: `${banner}<div class="page-head detail-head"><div><p class="doc-kicker">${docKind(d)} <span class="doc-number">${esc(d.number || "")}</span></p><h1 tabindex="-1">${esc(d.event || docKind(d))}</h1><p>${esc(snap.name)} · ${date(d.date)}${d.venue ? ` · ${esc(d.venue)}` : ""}</p><div class="detail-status">${badge(d.archived ? "archived" : status)}${d.archived ? "" : validityNote(d, status)}</div></div><div class="actions">${actions}</div></div><div class="detail-grid">${values}${event}${who}${services}${panel(isQuote ? "Contrato" : "Origem", link)}${panel("Histórico", timeline)}</div>`,
   };
 }
@@ -1980,8 +2640,16 @@ function clientDetail(c) {
   const contact = panel(
     "Contato",
     dl([
-      ["WhatsApp", c.phone ? `${esc(c.phone)}${wa ? ` · <a href="https://wa.me/${wa}" target="_blank" rel="noopener noreferrer">Abrir conversa<span class="sr-only"> (abre em nova aba)</span></a>` : ""}` : ""],
-      ["E-mail", c.email ? `<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>` : ""],
+      [
+        "WhatsApp",
+        c.phone
+          ? `${esc(c.phone)}${wa ? ` · <a href="https://wa.me/${wa}" target="_blank" rel="noopener noreferrer">Abrir conversa<span class="sr-only"> (abre em nova aba)</span></a>` : ""}`
+          : "",
+      ],
+      [
+        "E-mail",
+        c.email ? `<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>` : "",
+      ],
       ["CPF / CNPJ", esc(c.document || "")],
       ["Endereço", esc(c.address || "")],
     ]) || '<p class="hint">Nenhum contato cadastrado.</p>',
@@ -1991,13 +2659,26 @@ function clientDetail(c) {
     dl([
       ["Orçamentos", String(active.length - contracts.length)],
       ["Contratos", String(contracts.length)],
-      ["Valor contratado", money(closed.reduce((s, d) => s + Number(d.total || 0), 0))],
-      ["Próximo evento", next ? `<a href="${docHref(next)}">${date(next.date)} · ${esc(next.event)}</a>` : "Nenhum agendado"],
+      [
+        "Valor contratado",
+        money(closed.reduce((s, d) => s + Number(d.total || 0), 0)),
+      ],
+      [
+        "Próximo evento",
+        next
+          ? `<a href="${docHref(next)}">${date(next.date)} · ${esc(next.event)}</a>`
+          : "Nenhum agendado",
+      ],
     ]),
   );
   const list = docEntries(entriesOf(sortDocs(all, "recent")), {
     compact: true,
-    emptyHtml: empty("Nenhum documento ainda", "Crie o primeiro orçamento para este cliente.", "", ""),
+    emptyHtml: empty(
+      "Nenhum documento ainda",
+      "Crie o primeiro orçamento para este cliente.",
+      "",
+      "",
+    ),
   });
   return {
     title: c.name,
@@ -2009,19 +2690,27 @@ function clientDetail(c) {
 // ---------- Novo orçamento: escolher modelo ou começar em branco ----------
 function openPicker(extra = {}) {
   const templates = state.quoteTemplates || QUOTE_TEMPLATES;
-  const tags = (t) => (t.offers.length > 1 ? `${t.offers.length} opções de serviço` : "Pacote completo");
+  const tags = (t) =>
+    t.offers.length > 1
+      ? `${t.offers.length} opções de serviço`
+      : "Pacote completo";
   picker.innerHTML = `<div class="modal-head"><h2 id="picker-title">Novo orçamento</h2><button type="button" class="icon-button" data-picker-close aria-label="Fechar">×</button></div><div class="modal-body"><p class="picker-intro">Escolha um modelo pronto ou comece em branco. Tudo continua editável.</p><div class="picker-grid">${templates
     .map(
       (t) =>
         `<button type="button" class="picker-option" data-pick="${esc(t.id)}"><img src="/quote-assets/estrutura.png" alt="" loading="lazy"><span class="picker-name">${esc(t.name)}</span><span class="picker-desc">${esc(t.description)}</span><span class="picker-tag">${tags(t)}</span></button>`,
     )
-    .join("")}<button type="button" class="picker-option blank" data-pick=""><span class="picker-plus" aria-hidden="true">＋</span><span class="picker-name">Começar em branco</span><span class="picker-desc">Sem modelo: serviços e valores do seu jeito.</span></button></div></div>`;
+    .join(
+      "",
+    )}<button type="button" class="picker-option blank" data-pick=""><span class="picker-plus" aria-hidden="true">＋</span><span class="picker-name">Começar em branco</span><span class="picker-desc">Sem modelo: serviços e valores do seu jeito.</span></button></div></div>`;
   picker.onclick = (event) => {
     const button = event.target.closest("[data-pick], [data-picker-close]");
     if (!button) return;
     picker.close();
     if ("pick" in button.dataset)
-      editDoc("quote", { ...extra, ...(button.dataset.pick ? { templateId: button.dataset.pick } : {}) });
+      editDoc("quote", {
+        ...extra,
+        ...(button.dataset.pick ? { templateId: button.dataset.pick } : {}),
+      });
   };
   picker.showModal();
 }
@@ -2056,9 +2745,13 @@ async function archiveDoc(id) {
   }
   pendingFocus = route.id === id ? "heading" : "#search";
   await load();
-  toast(`${docKind(d)} ${d.number} arquivado. Ele sai das listas e do painel.`, "success", {
-    action: { label: "Desfazer", onClick: () => restoreDoc(id) },
-  });
+  toast(
+    `${docKind(d)} ${d.number} arquivado. Ele sai das listas e do painel.`,
+    "success",
+    {
+      action: { label: "Desfazer", onClick: () => restoreDoc(id) },
+    },
+  );
 }
 async function restoreDoc(id) {
   const d = findDoc(id);
@@ -2090,7 +2783,11 @@ async function deleteDoc(id) {
     return toast(error.message, "error");
   }
   if (route.id === id) {
-    history.replaceState(null, "", buildHash({ page: listPageFor(d.type), filter: "archived" }));
+    history.replaceState(
+      null,
+      "",
+      buildHash({ page: listPageFor(d.type), filter: "archived" }),
+    );
     route = parseRoute(location.hash);
   }
   pendingFocus = "heading";
@@ -2101,8 +2798,31 @@ async function deleteDoc(id) {
 function duplicateDoc(id) {
   const d = findDoc(id);
   if (!d) return;
-  const copy = { ...d, status: "draft", copiedFrom: d.number };
-  for (const key of ["id", "number", "company", "createdAt", "updatedAt", "history", "sentAt", "archived", "archivedAt", "sourceId", "quoteTemplate", "client", "clientId", "date", "event", "guests", "payments"])
+  const copy = {
+    ...d,
+    status: "draft",
+    copiedFrom: d.number,
+    imageConsent: false,
+  };
+  for (const key of [
+    "id",
+    "number",
+    "company",
+    "createdAt",
+    "updatedAt",
+    "history",
+    "sentAt",
+    "archived",
+    "archivedAt",
+    "sourceId",
+    "quoteTemplate",
+    "client",
+    "clientId",
+    "date",
+    "event",
+    "guests",
+    "payments",
+  ])
     delete copy[key];
   // A ficha (indicação, recepção, equipe) é do evento copiado: começa em branco.
   for (const [key] of CONTRACT_SHEET_FIELDS) delete copy[key];
@@ -2163,58 +2883,113 @@ function sendDialog(id) {
   const client = findClient(d.clientId ?? d.client?.id) || d.client || {},
     isDraft = d.status === "draft",
     noun = d.type === "quote" ? "orçamento" : "contrato";
-  const html = `${field("WhatsApp do cliente", "waPhone", maskPhone(client.phone || ""), "tel", false, false, {
-    attrs: 'data-mask="phone" autocomplete="off"',
-    hint: "Com DDD. Sem número, o WhatsApp pede para escolher o contato.",
-  })}${area("Mensagem", "waMessage", whatsappMessage(d, { company: d.company || state.settings }), true, { attrs: 'rows="9"' })}<div class="field full send-pdf"><span class="label">PDF do ${noun}</span><p class="hint">O WhatsApp abre em outra aba com a mensagem. Baixe o PDF e anexe na conversa.</p><div class="payment-actions"><a class="btn" href="/api/documents/${d.id}/pdf" download>Baixar PDF</a><button type="button" id="share-pdf" hidden>Compartilhar PDF</button></div></div><div class="field full"><label class="check"><input type="checkbox" name="markSent" checked> ${isDraft ? "Marcar como enviado (sai de Rascunho)" : "Registrar o envio no histórico"}</label></div>`;
-  const ctrl = openModal(`Enviar ${noun} pelo WhatsApp`, html, (b) => {
-    // A aba precisa abrir ainda no clique, antes de qualquer espera, para não ser bloqueada.
-    const tab = window.open(whatsappLink(whatsappNumber(b.waPhone), b.waMessage), "_blank");
-    if (!tab) throw Error("O navegador bloqueou a nova aba. Permita pop-ups para este endereço e tente de novo.");
-    tab.opener = null;
-    return b.markSent === "on" ? api(`/documents/${d.id}/sent`, { channel: "whatsapp" }) : null;
-  }, {
-    submitLabel: "Abrir WhatsApp",
-    successMessage: "",
-    legend: false,
-    onSaved: (saved) => toast(saved ? "WhatsApp aberto em outra aba. Envio registrado." : "WhatsApp aberto em outra aba."),
-  });
+  const html = `${field(
+    "WhatsApp do cliente",
+    "waPhone",
+    maskPhone(client.phone || ""),
+    "tel",
+    false,
+    false,
+    {
+      attrs: 'data-mask="phone" autocomplete="off"',
+      hint: "Com DDD. Sem número, o WhatsApp pede para escolher o contato.",
+    },
+  )}${area("Mensagem", "waMessage", whatsappMessage(d, { company: d.company || state.settings }), true, { attrs: 'rows="9"' })}<div class="field full send-pdf"><span class="label">PDF do ${noun}</span><p class="hint">O WhatsApp abre em outra aba com a mensagem. Baixe o PDF e anexe na conversa.</p><div class="payment-actions"><a class="btn" href="/api/documents/${d.id}/pdf" download>Baixar PDF</a><button type="button" id="share-pdf" hidden>Compartilhar PDF</button></div></div><div class="field full"><label class="check"><input type="checkbox" name="markSent" checked> ${isDraft ? "Marcar como enviado (sai de Rascunho)" : "Registrar o envio no histórico"}</label></div>`;
+  const ctrl = openModal(
+    `Enviar ${noun} pelo WhatsApp`,
+    html,
+    (b) => {
+      // A aba precisa abrir ainda no clique, antes de qualquer espera, para não ser bloqueada.
+      const tab = window.open(
+        whatsappLink(whatsappNumber(b.waPhone), b.waMessage),
+        "_blank",
+      );
+      if (!tab)
+        throw Error(
+          "O navegador bloqueou a nova aba. Permita pop-ups para este endereço e tente de novo.",
+        );
+      tab.opener = null;
+      return b.markSent === "on"
+        ? api(`/documents/${d.id}/sent`, { channel: "whatsapp" })
+        : null;
+    },
+    {
+      submitLabel: "Abrir WhatsApp",
+      successMessage: "",
+      legend: false,
+      onSaved: (saved) =>
+        toast(
+          saved
+            ? "WhatsApp aberto em outra aba. Envio registrado."
+            : "WhatsApp aberto em outra aba.",
+        ),
+    },
+  );
   const form = ctrl.form,
     phone = $("#f-waPhone", form);
   ctrl.extraValidation = () =>
     phone.value.trim() && !whatsappNumber(phone.value)
-      ? [{ el: phone, message: "Informe o número com DDD, por exemplo (47) 99999-0000." }]
+      ? [
+          {
+            el: phone,
+            message: "Informe o número com DDD, por exemplo (47) 99999-0000.",
+          },
+        ]
       : [];
   // Celular e computadores com compartilhamento nativo: envia o arquivo direto para o WhatsApp.
   const share = $("#share-pdf", form);
-  if (!navigator.canShare?.({ files: [new File([""], "teste.pdf", { type: "application/pdf" })] })) return;
+  if (
+    !navigator.canShare?.({
+      files: [new File([""], "teste.pdf", { type: "application/pdf" })],
+    })
+  )
+    return;
   share.hidden = false;
   const file = fetch(`/api/documents/${d.id}/pdf`)
     .then((r) => (r.ok ? r.blob() : Promise.reject(Error())))
-    .then((blob) => new File([blob], `${d.number}.pdf`, { type: "application/pdf" }))
+    .then(
+      (blob) =>
+        new File([blob], `${d.number}.pdf`, { type: "application/pdf" }),
+    )
     .catch(() => null);
   share.onclick = async () => {
     const pdf = await file;
     try {
       if (!pdf) throw Error("Não foi possível preparar o PDF.");
-      await navigator.share({ files: [pdf], text: $("#f-waMessage", form).value });
+      await navigator.share({
+        files: [pdf],
+        text: $("#f-waMessage", form).value,
+      });
     } catch (error) {
       if (error.name !== "AbortError")
-        showSummary(ctrl.alerts, [{ message: error.message || "O compartilhamento não foi concluído." }], "Não foi possível compartilhar");
+        showSummary(
+          ctrl.alerts,
+          [
+            {
+              message: error.message || "O compartilhamento não foi concluído.",
+            },
+          ],
+          "Não foi possível compartilhar",
+        );
       return;
     }
     const saved = $('[name="markSent"]', form).checked
-      ? await api(`/documents/${d.id}/sent`, { channel: "share" }).catch(() => null)
+      ? await api(`/documents/${d.id}/sent`, { channel: "share" }).catch(
+          () => null,
+        )
       : null;
     ctrl.close();
     await load();
-    toast(saved ? "PDF compartilhado. Envio registrado." : "PDF compartilhado.");
+    toast(
+      saved ? "PDF compartilhado. Envio registrado." : "PDF compartilhado.",
+    );
   };
 }
 
 // ---------- Menu "⋯" das linhas (um único popover, preenchido para a linha clicada) ----------
 function menuItems(d) {
-  const button = (attr, label, cls = "") => `<button type="button"${cls ? ` class="${cls}"` : ""} ${attr}>${label}</button>`;
+  const button = (attr, label, cls = "") =>
+    `<button type="button"${cls ? ` class="${cls}"` : ""} ${attr}>${label}</button>`;
   if (d.archived)
     return [
       button(`data-restore="${d.id}"`, "Restaurar"),
@@ -2226,9 +3001,14 @@ function menuItems(d) {
     source = d.type === "contract" && d.sourceId ? findDoc(d.sourceId) : null;
   return [
     `<a href="${docHref(d)}">Abrir ${d.type === "quote" ? "orçamento" : "contrato"}</a>`,
-    button(`data-preview-pdf="${d.id}"`, 'Visualizar PDF<span class="sr-only"> (abre em nova aba)</span> <span aria-hidden="true">↗</span>'),
+    button(
+      `data-preview-pdf="${d.id}"`,
+      'Visualizar PDF<span class="sr-only"> (abre em nova aba)</span> <span aria-hidden="true">↗</span>',
+    ),
     button(`data-pdf="${d.id}"`, "Baixar PDF"),
-    d.status !== "cancelled" ? button(`data-send="${d.id}"`, "Enviar pelo WhatsApp") : "",
+    d.status !== "cancelled"
+      ? button(`data-send="${d.id}"`, "Enviar pelo WhatsApp")
+      : "",
     button(`data-edit-doc="${d.id}"`, "Editar"),
     button(`data-duplicate="${d.id}"`, "Duplicar"),
     d.type === "quote"
@@ -2265,19 +3045,27 @@ function positionMenu() {
   const r = menuTrigger.getBoundingClientRect(),
     w = rowMenu.offsetWidth,
     h = rowMenu.offsetHeight;
-  const top = r.bottom + 6 + h > innerHeight - 8 ? Math.max(8, r.top - h - 6) : r.bottom + 6;
+  const top =
+    r.bottom + 6 + h > innerHeight - 8
+      ? Math.max(8, r.top - h - 6)
+      : r.bottom + 6;
   rowMenu.style.top = `${top}px`;
   rowMenu.style.left = `${Math.min(Math.max(8, r.right - w), innerWidth - w - 8)}px`;
 }
 let menuHadFocus = false;
 rowMenu.addEventListener("beforetoggle", (event) => {
-  if (event.newState === "closed") menuHadFocus = rowMenu.contains(document.activeElement);
+  if (event.newState === "closed")
+    menuHadFocus = rowMenu.contains(document.activeElement);
 });
 rowMenu.addEventListener("toggle", (event) => {
   if (event.newState === "open") {
     positionMenu();
     if (rowMenu.dataset.keyboard) $("a, button", rowMenu)?.focus();
-  } else if (menuHadFocus && menuTrigger?.isConnected && !document.querySelector("dialog[open]"))
+  } else if (
+    menuHadFocus &&
+    menuTrigger?.isConnected &&
+    !document.querySelector("dialog[open]")
+  )
     menuTrigger.focus();
 });
 // Setas, Home e End percorrem as opções; Tab fecha e volta para o botão "⋯".
@@ -2285,7 +3073,12 @@ rowMenu.addEventListener("keydown", (event) => {
   const items = $$("a, button", rowMenu),
     i = items.indexOf(document.activeElement),
     n = items.length;
-  const move = { ArrowDown: (i + 1) % n, ArrowUp: (i - 1 + n) % n, Home: 0, End: n - 1 }[event.key];
+  const move = {
+    ArrowDown: (i + 1) % n,
+    ArrowUp: (i - 1 + n) % n,
+    Home: 0,
+    End: n - 1,
+  }[event.key];
   if (move !== undefined) {
     event.preventDefault();
     items[move]?.focus();
@@ -2294,7 +3087,10 @@ rowMenu.addEventListener("keydown", (event) => {
     rowMenu.hidePopover();
   }
 });
-addEventListener("resize", () => rowMenu.matches(":popover-open") && rowMenu.hidePopover());
+addEventListener(
+  "resize",
+  () => rowMenu.matches(":popover-open") && rowMenu.hidePopover(),
+);
 
 // ---------- Navegação por endereço (hash) ----------
 const routeKey = (r) => `${r.page}/${r.id ?? ""}`;
@@ -2314,7 +3110,8 @@ function onRoute() {
   route = parseRoute(location.hash);
   pendingFocus = "heading";
   render();
-  const back = previous.id != null && route.id == null && previous.page === route.page;
+  const back =
+    previous.id != null && route.id == null && previous.page === route.page;
   window.scrollTo(0, back ? scrollMemory.get(routeKey(route)) || 0 : 0);
 }
 // Links internos passam por aqui para confirmar a saída de formulários alterados.
@@ -2357,14 +3154,26 @@ function onClick(event) {
     }
     const href = target.getAttribute("href") || "";
     // Ctrl/Cmd + clique e botão do meio continuam abrindo em nova aba.
-    if (!href.startsWith("#/") || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button !== 0) return;
+    if (
+      !href.startsWith("#/") ||
+      event.ctrlKey ||
+      event.metaKey ||
+      event.shiftKey ||
+      event.altKey ||
+      event.button !== 0
+    )
+      return;
     event.preventDefault();
     if (popover?.matches(":popover-open")) popover.hidePopover();
     navigate(href);
     return;
   }
   if (ds.menu) return prepareRowMenu(target, event);
-  if (popover?.matches(":popover-open") && !target.hasAttribute("popovertarget")) popover.hidePopover();
+  if (
+    popover?.matches(":popover-open") &&
+    !target.hasAttribute("popovertarget")
+  )
+    popover.hidePopover();
   const id = Number;
   if (ds.action === "logout") return logout();
   if (ds.action === "clear-filters") return clearFilters();
@@ -2376,15 +3185,28 @@ function onClick(event) {
     return ds.new === "quote" ? openPicker() : editDoc(ds.new);
   }
   if (ds.newFor) return openPicker({ clientId: ds.newFor });
-  if (ds.quoteTemplate) return editDoc("quote", { templateId: ds.quoteTemplate });
-  if (ds.editClient) return findClient(ds.editClient) && editClient(findClient(ds.editClient));
+  if (ds.quoteTemplate)
+    return editDoc("quote", { templateId: ds.quoteTemplate });
+  if (ds.editClient)
+    return findClient(ds.editClient) && editClient(findClient(ds.editClient));
   if (ds.deleteClient) return deleteClient(id(ds.deleteClient));
-  if (ds.editProduct) return editProduct(state.products.find((p) => p.id === id(ds.editProduct)));
+  if (ds.editProduct)
+    return editProduct(state.products.find((p) => p.id === id(ds.editProduct)));
   if (ds.deleteProduct) return deleteProduct(id(ds.deleteProduct));
-  if (ds.editPackage) return editPackage(state.packages.find((p) => p.id === id(ds.editPackage)));
+  if (ds.editPackage)
+    return editPackage(state.packages.find((p) => p.id === id(ds.editPackage)));
   if (ds.deletePackage) return deletePackage(id(ds.deletePackage));
-  if (ds.editDoc) return findDoc(ds.editDoc) && editDoc(findDoc(ds.editDoc).type, findDoc(ds.editDoc));
-  if (ds.previewPdf) return void window.open(`/api/documents/${ds.previewPdf}/pdf?inline=1`, "_blank", "noopener,noreferrer");
+  if (ds.editDoc)
+    return (
+      findDoc(ds.editDoc) &&
+      editDoc(findDoc(ds.editDoc).type, findDoc(ds.editDoc))
+    );
+  if (ds.previewPdf)
+    return void window.open(
+      `/api/documents/${ds.previewPdf}/pdf?inline=1`,
+      "_blank",
+      "noopener,noreferrer",
+    );
   if (ds.pdf) return downloadPdf(ds.pdf);
   if (ds.convert) return convertQuote(id(ds.convert), target);
   if (ds.send) return sendDialog(id(ds.send));
@@ -2431,14 +3253,21 @@ document.addEventListener(
     if (el.matches("[data-money]")) {
       const clean = el.value.replace(/[^\d.,]/g, "");
       if (clean !== el.value) {
-        const caret = Math.max(0, (el.selectionStart ?? clean.length) - (el.value.length - clean.length));
+        const caret = Math.max(
+          0,
+          (el.selectionStart ?? clean.length) -
+            (el.value.length - clean.length),
+        );
         el.value = clean;
         el.setSelectionRange(caret, caret);
       }
       return;
     }
     if (el.dataset.mask && el.selectionStart === el.value.length) {
-      const masked = el.dataset.mask === "phone" ? maskPhone(el.value) : maskDocument(el.value);
+      const masked =
+        el.dataset.mask === "phone"
+          ? maskPhone(el.value)
+          : maskDocument(el.value);
       if (masked !== el.value) el.value = masked;
     }
   },
@@ -2449,9 +3278,13 @@ document.addEventListener("focusout", (event) => {
   if (!(el instanceof HTMLInputElement)) return;
   if (el.matches("[data-money]") && !el.readOnly) {
     const value = parseMoney(el.value);
-    if (typeof value === "number" && !Number.isNaN(value)) el.value = formatMoneyInput(value);
+    if (typeof value === "number" && !Number.isNaN(value))
+      el.value = formatMoneyInput(value);
   } else if (el.dataset.mask)
-    el.value = el.dataset.mask === "phone" ? maskPhone(el.value) : maskDocument(el.value);
+    el.value =
+      el.dataset.mask === "phone"
+        ? maskPhone(el.value)
+        : maskDocument(el.value);
 });
 document.addEventListener("click", (event) => {
   const toggle = event.target.closest("[data-toggle-password]");
@@ -2466,12 +3299,22 @@ $("#alert-close").onclick = closeAlert;
 const toastBox = $("#toast");
 toastBox.addEventListener("mouseenter", () => clearTimeout(toastTimer));
 toastBox.addEventListener("focusin", () => clearTimeout(toastTimer));
-toastBox.addEventListener("mouseleave", () => toastBox.classList.contains("show") && startToastTimer());
+toastBox.addEventListener(
+  "mouseleave",
+  () => toastBox.classList.contains("show") && startToastTimer(),
+);
 toastBox.addEventListener("focusout", (event) => {
-  if (!toastBox.contains(event.relatedTarget) && toastBox.classList.contains("show")) startToastTimer();
+  if (
+    !toastBox.contains(event.relatedTarget) &&
+    toastBox.classList.contains("show")
+  )
+    startToastTimer();
 });
 window.addEventListener("beforeunload", (event) => {
-  if ([...forms.values()].some((ctrl) => ctrl.dialog.open && ctrl.isDirty()) || pageGuard?.()) {
+  if (
+    [...forms.values()].some((ctrl) => ctrl.dialog.open && ctrl.isDirty()) ||
+    pageGuard?.()
+  ) {
     event.preventDefault();
     event.returnValue = "";
   }

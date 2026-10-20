@@ -6,13 +6,17 @@ Sistema web em português para clientes, pacotes e preços, orçamentos e contra
 
 O sistema roda no computador de quem usa. Não precisa instalar o Node.js e **não precisa ser administrador**.
 
-1. Copie a pasta `AOF Studio` para o computador (ou descompacte o `AOF-Studio-<versão>-windows.zip`).
-2. Dê duplo clique em **`Instalar.cmd`**.
-3. Abra o **AOF Studio** pelo menu Iniciar ou pelo atalho da área de trabalho.
+1. Descompacte o `AOF-Studio-<versão>-windows.zip`.
+2. Abra **`AOF Studio.exe`**. Ele funciona diretamente, sem instalar o Node.js.
+3. Se quiser atalhos no menu Iniciar e na área de trabalho, execute **`Instalar.vbs`**; depois abra pelo atalho.
 
-A instalação copia um único arquivo para `%LOCALAPPDATA%\Programs\AOF Studio` e cria os atalhos do seu usuário. Nada é escrito em `Program Files` nem no registro do Windows, e nenhum serviço fica em segundo plano.
+A instalação copia um único arquivo para `%LOCALAPPDATA%\Programs\AOF Studio` e cria os atalhos do seu usuário. Nada é escrito em `Program Files` nem no registro do Windows, e nenhum serviço do Windows é instalado.
 
-Ao abrir, o programa sobe o sistema e o navegador vai para `http://localhost:3000`. A janela de console é o motor do sistema: deixe-a aberta durante o uso e feche-a para encerrar. Abrir o atalho de novo reaproveita a janela que já está aberta, em vez de subir uma segunda cópia.
+O programa abre uma **janela própria do Microsoft Edge ou Google Chrome**, sem janela de CMD. É necessário ter um desses navegadores no computador; não é instalado outro navegador nem exigido acesso de administrador.
+
+O servidor roda em segundo plano enquanto a janela do aplicativo está aberta. Ao fechar a última janela do sistema, ele encerra após uma pequena tolerância para recarregamento (normalmente alguns segundos), consolidando o banco. Atualizar a página não fecha o programa. O perfil do navegador é separado: as janelas pessoais do usuário não são encerradas. Abrir o atalho novamente enquanto o aplicativo está aberto mostra um aviso para usar a janela existente.
+
+Se a política do computador impedir o monitoramento da janela, o sistema usa sinais da própria página. Um fechamento abrupto, sem aviso do navegador, pode levar até 90 segundos para ser identificado. Erros são exibidos em uma caixa de mensagem e registrados em `%LOCALAPPDATA%\AOF Studio\logs\app.log`.
 
 O endereço responde **somente neste computador** (127.0.0.1). Outras máquinas da rede não alcançam o sistema nem o banco, e por isso o celular também não acessa.
 
@@ -20,13 +24,13 @@ Telas, imagens e as fontes dos PDFs ficam dentro do programa, então o sistema f
 
 ### Comandos do programa
 
-| Comando | O que faz |
-|---|---|
-| `--instalar` | Instala para o seu usuário e cria os atalhos. |
-| `--desinstalar` | Remove os atalhos e a pasta do programa. Os dados continuam. |
+| Comando              | O que faz                                                    |
+| -------------------- | ------------------------------------------------------------ |
+| `--instalar`         | Instala para o seu usuário e cria os atalhos.                |
+| `--desinstalar`      | Remove os atalhos e a pasta do programa. Os dados continuam. |
 | `--importar <pasta>` | Traz o `app.sqlite` de outra instalação ou da pasta `data/`. |
-| `--pasta-dados` | Mostra onde ficam o banco e os backups. |
-| `--ajuda` | Lista todos os comandos. |
+| `--pasta-dados`      | Mostra onde ficam o banco e os backups.                      |
+| `--ajuda`            | Lista todos os comandos.                                     |
 
 Trazendo os dados de uma execução anterior pelo código-fonte:
 
@@ -56,13 +60,13 @@ O executável não entra no histórico do git: tem ~97 MB, e o GitHub bloqueia a
 Atualize a versão no `package.json` e envie uma tag igual:
 
 ```sh
-git tag v1.1.0
-git push origin v1.1.0
+git tag v1.2.0
+git push origin v1.2.0
 ```
 
 O workflow **Release do Windows** compila num Windows limpo, roda `npm test` e `npm run verify:exe` e anexa o zip e o `.exe` ao release. Se a tag não corresponder à versão do `package.json`, ele para antes de publicar. O texto do release vem de `.github/release-notes.md`. Para só compilar e conferir sem publicar, use **Run workflow** na aba Actions: os arquivos ficam como artefato da execução por 14 dias.
 
-O ícone é versionado em `assets/aof-studio.ico`. Para regerá-lo a partir do logo: `node build/make-icon.mjs`.
+O ícone fornecido pelo usuário é preservado em `assets/aof-studio.ico` e `public/aof-studio.ico`. O primeiro é incorporado ao executável; o segundo aparece na interface e na aba do navegador. Não execute `build/make-icon.mjs` para manter esse arquivo original, pois esse utilitário regenera um ícone a partir do logo antigo.
 
 ## Executar a partir do código
 
@@ -92,8 +96,8 @@ O Node.js também é distribuído em **ZIP portátil**, que funciona a partir de
 
 1. Baixe o arquivo oficial [Node.js 24.22.0 para Windows x64 (ZIP)](https://nodejs.org/dist/v24.22.0/node-v24.22.0-win-x64.zip). Se o computador usa processador ARM, use o [ZIP ARM64](https://nodejs.org/dist/v24.22.0/node-v24.22.0-win-arm64.zip).
 2. Na pasta do projeto, crie uma pasta chamada `runtime` e use **Extrair tudo** no ZIP. Preserve a pasta interna: deve existir `runtime/node-v24.22.0-win-x64/node.exe` (ou a variante ARM64). Extraia também todos os demais arquivos; não copie apenas o `node.exe`.
-3. Dê duplo clique em **`iniciar-windows.cmd`**, na pasta do projeto. Ele usa essa versão portátil, instala as dependências no próprio projeto e inicia o servidor. Na primeira execução, precisa de Internet para baixar as dependências. Não execute como administrador.
-4. O navegador abre sozinho em **http://localhost:3000** quando o sistema estiver pronto. Mantenha a janela aberta enquanto usa o sistema.
+3. Dê duplo clique em **`iniciar-windows.vbs`**, na pasta do projeto. Ele usa essa versão portátil e inicia o sistema **sem deixar o CMD aberto**. Na primeira execução, precisa de Internet para preparar as dependências. Não execute como administrador.
+4. Use a janela do aplicativo; ao fechá-la, o servidor também é encerrado. `iniciar-windows.cmd` continua disponível para diagnóstico com o terminal visível. Erros do iniciador oculto ficam em `%LOCALAPPDATA%\AOF Studio\logs\portable-startup.log`.
 
 O iniciador limita o PATH à própria janela; não modifica configurações globais. O runtime, o cache e os cadastros não são enviados ao Git. As dependências são instaladas com `npm ci` só na primeira execução ou quando o `package-lock.json` muda; nas demais, o sistema abre sem Internet. Para forçar a reinstalação, apague a pasta `node_modules`. A instalação não apaga o banco em `data/`.
 
@@ -103,7 +107,7 @@ Os checksums oficiais são publicados em [SHASUMS256.txt](https://nodejs.org/dis
 
 1. Cadastre sua conta e revise os dados da empresa em **Configurações**.
 2. Cadastre clientes e pacotes com equipamentos e preços.
-3. Em **Novo orçamento**, escolha um modelo pronto ou comece em branco e preencha evento, horários, validade e parcelas. A validade sugerida é de 15 dias, ajustável em **Configurações**; depois dessa data, o orçamento aparece como **Vencido**.
+3. Em **Novo orçamento**, escolha um modelo pronto ou comece em branco, selecione o **Tipo de evento** e preencha evento, horários, validade e parcelas. A validade sugerida é de 15 dias, ajustável em **Configurações**; depois dessa data, o orçamento aparece como **Vencido**.
 4. Baixe o PDF ou gere o contrato. O contrato gerado abre para revisão, e o orçamento passa a aparecer como **Convertido**, com o atalho **Ver contrato**.
 5. Revise as cláusulas, autorização de imagem e condições, e emita o PDF do contrato.
 
@@ -148,15 +152,15 @@ Para conferir o executável compilado, `npm run verify:exe` (veja **Compilar o e
 
 **Produtos** é o catálogo de equipamentos e serviços avulsos. Cada produto escolhe **em qual quadro do contrato** ele é impresso:
 
-| Quadro no cadastro | Coluna no contrato |
-|---|---|
-| Som da festa | EQUIPAMENTOS DE SOM “FESTA” |
-| DJ | EQUIPAMENTOS DJ FESTA |
-| Iluminação e efeitos | ILUMINAÇÃO E EFEITOS PARA DANÇA |
-| Som da cerimônia | EQUIPAMENTOS DE SOM CERIMÔNIA |
-| Kit mídia (fotos e vídeos) | KIT MÍDIA FOTOS E VÍDEOS |
+| Quadro no cadastro              | Coluna no contrato              |
+| ------------------------------- | ------------------------------- |
+| Som da festa                    | EQUIPAMENTOS DE SOM “FESTA”     |
+| DJ                              | EQUIPAMENTOS DJ FESTA           |
+| Iluminação e efeitos            | ILUMINAÇÃO E EFEITOS PARA DANÇA |
+| Som da cerimônia                | EQUIPAMENTOS DE SOM CERIMÔNIA   |
+| Kit mídia (fotos e vídeos)      | KIT MÍDIA FOTOS E VÍDEOS        |
 | Cênicas (iluminação decorativa) | CÊNICAS – ILUMINAÇÃO DECORATIVA |
-| Outros itens | OUTROS ITENS |
+| Outros itens                    | OUTROS ITENS                    |
 
 Com isso a coluna deixa de ser adivinhada pelo nome do item. Uma "Luz âmbar para as mesas" cadastrada em **Cênicas** sai no quadro de cênicas, e não na iluminação de pista.
 
@@ -180,4 +184,24 @@ Use **Visualizar PDF** para conferir e **Baixar PDF** para salvar. O PDF é gera
 
 Os usuários, as senhas derivadas, os clientes e os documentos ficam **no seu computador**: em `%LOCALAPPDATA%\AOF Studio\data` quando instalado, ou em `data/` quando você roda pelo código. As senhas usam scrypt com salt individual e não ficam salvas como texto legível. Os dados não são enviados ao GitHub e não são compartilhados automaticamente com outro computador.
 
-Para atualizar a versão instalada, feche o sistema e rode o `Instalar.cmd` da versão nova: ele substitui o programa e **não toca na pasta de dados**. Para fazer uma cópia de segurança, feche o sistema e copie a pasta de dados inteira para um local seguro; não copie apenas o arquivo principal com o sistema em execução. `--pasta-dados` mostra o caminho exato.
+Para atualizar a versão instalada, feche o sistema e rode o `Instalar.vbs` da versão nova: ele substitui o programa e **não toca na pasta de dados**. Para fazer uma cópia de segurança, feche o sistema e copie a pasta de dados inteira para um local seguro; não copie apenas o arquivo principal com o sistema em execução. `--pasta-dados` mostra o caminho exato.
+
+## Ícone e logos para impressão
+
+O ícone do aplicativo é o arquivo `.ico` fornecido para o AOF Studio. Os logos de impressão são independentes dele e ficam em **Configurações → Logos dos PDFs**. Cada conta escolhe uma imagem para **orçamentos** e outra para **contratos**, com prévia e botão para voltar ao padrão.
+
+São aceitos PNG, JPG e ICO de até 5 MB na interface. A imagem é ajustada no próprio navegador para até 512 pixels, preservando a proporção e a transparência; o formato armazenado é PNG/JPEG, limitado a 256 KB. O servidor valida novamente tipo, tamanho e dimensões antes de salvar.
+
+O logo fica no banco local com as configurações da conta e é copiado para os novos documentos. Alterar ou remover o logo não modifica documentos emitidos: cada um conserva a identidade salva na criação. Um contrato gerado de um orçamento mantém essa identidade. O ícone do sistema e os logos não exigem serviços externos.
+
+## Tipos de evento
+
+O campo **Tipo de evento** oferece **Casamento**, **Debutantes**, **Aniversário** e **Formatura**. Cada categoria tem uma imagem ilustrativa própria, mostrada no formulário e impressa no PDF, tanto nos modelos prontos quanto em orçamentos personalizados. As imagens ficam incluídas no sistema e funcionam sem internet.
+
+O título e a apresentação sugeridos acompanham a categoria. Textos personalizados são preservados ao trocar o tipo ou o modelo. A escolha não modifica os serviços e valores; o tipo fica salvo no documento e acompanha a conversão em contrato.
+
+Documentos anteriores continuam sem classificação e preservam a apresentação antiga até que você escolha um tipo ao editar. Novos documentos pedem a seleção do tipo de evento.
+
+## Validação da versão Windows
+
+Os testes de lógica e de servidor podem ser executados em qualquer plataforma com Node.js 24. O build do executável e a confirmação de ausência de console precisam ser executados no Windows: `npm run build:exe` e `npm run verify:exe`. O workflow **Release do Windows** faz essas verificações também nos pushes de branches de funcionalidades/correções e nos pull requests; somente tags de versão publicam um release. Não é necessário criar uma tag para validar uma alteração.
