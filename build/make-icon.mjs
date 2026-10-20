@@ -1,5 +1,5 @@
 import { spawnSync } from "node:child_process";
-import { mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, mkdirSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -7,7 +7,15 @@ import { fileURLToPath } from "node:url";
 // fica versionado, então a compilação do dia a dia não depende disto.
 // Uso: node build/make-icon.mjs
 const root = resolve(fileURLToPath(new URL("..", import.meta.url)));
-const source = join(root, "public", "quote-assets", "logo-contrato.jpg");
+// Imagem de origem: a versionada em assets, ou o logo como reserva. Um caminho
+// pode ser passado como argumento para gerar o ícone de outra imagem.
+// Trocar o .ico por um PNG renomeado não funciona: o Windows precisa do
+// formato ICO, que é um contêiner com as várias medidas dentro.
+const source =
+  process.argv[2] !== undefined
+    ? resolve(process.argv[2])
+    : [join(root, "assets", "icone-origem.png"), join(root, "public", "quote-assets", "logo-contrato.jpg")].find(existsSync);
+if (!source || !existsSync(source)) throw Error("Não encontrei a imagem de origem do ícone.");
 const target = join(root, "assets", "aof-studio.ico");
 const work = join(root, "build", ".work", "icon");
 const SIZES = [16, 24, 32, 48, 64, 128, 256];
