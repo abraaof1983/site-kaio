@@ -1,3 +1,11 @@
+import {
+  EQUIPMENT_CATEGORIES,
+  categoryLabel,
+  cleanItems,
+  equipmentText,
+  itemsTotal,
+  qtyLabel,
+} from "./catalog.js";
 import { QUOTE_TEMPLATES, dateBeforeEvent } from "./quote-templates.js";
 import {
   addDays,
@@ -62,6 +70,7 @@ const icons = {
   clients:
     '<circle cx="9" cy="8" r="3"/><path d="M3 21v-4a6 6 0 0 1 12 0v4M16 5a3 3 0 0 1 0 6M18 15a4 4 0 0 1 3 4"/>',
   packages: '<path d="m12 3 9 5-9 5-9-5zM3 8v9l9 5 9-5V8M12 13v9M7 5l10 5"/>',
+  products: '<path d="M20.6 13.4 13.4 20.6a2 2 0 0 1-2.8 0l-7.2-7.2A2 2 0 0 1 3 12V5a2 2 0 0 1 2-2h7a2 2 0 0 1 1.4.6l7.2 7.2a2 2 0 0 1 0 2.6zM7.5 7.5h.01"/>',
   settings:
     '<path d="m9 3-1 3-3 1 1 4-2 2 2 4 3-1 3 3 3-3 3 1 2-4-2-2 1-4-3-1-1-3z"/><circle cx="12" cy="11" r="3"/>',
   logout: '<path d="M14 4h5v16h-5M10 8l-4 4 4 4M6 12h11"/>',
@@ -404,6 +413,8 @@ function formValues(form) {
       $('[type="date"]', row).value,
       $("[data-money]", row).value,
     ]);
+  // Itens do catálogo são linhas montadas na hora, não campos com nome.
+  if ($("#items", form)) values.__items = readItemRows(form);
   return values;
 }
 // Compara valores, e não a formatação: "2900" e "2.900,00" são a mesma coisa.
@@ -432,7 +443,7 @@ function clearDrafts() {
 }
 function focusSelector(el) {
   if (!el || !root.contains(el)) return null;
-  for (const attr of ["data-edit-doc", "data-edit-client", "data-edit-package", "data-convert", "data-send", "data-duplicate", "data-quote-template", "data-new-for", "data-new"])
+  for (const attr of ["data-edit-doc", "data-edit-client", "data-edit-product", "data-edit-package", "data-convert", "data-send", "data-duplicate", "data-quote-template", "data-new-for", "data-new"])
     if (el.hasAttribute(attr)) return `[${attr}="${CSS.escape(el.getAttribute(attr))}"]`;
   // Ações escolhidas no menu "⋯" devolvem o foco ao próprio botão "⋯" da linha.
   if (el.closest("#row-menu") && menuTrigger?.dataset.menu)
@@ -588,6 +599,7 @@ const labels = {
   quotes: "Orçamentos",
   contracts: "Contratos",
   clients: "Clientes",
+  products: "Produtos",
   packages: "Pacotes e preços",
   settings: "Configurações",
 };
@@ -613,7 +625,7 @@ function render() {
   pendingFocus = null;
   if (focus) ((focus !== "heading" && root.querySelector(focus)) || root.querySelector("h1"))?.focus();
 }
-const NAV = ["dashboard", "quotes", "contracts", "clients", "packages", "settings"];
+const NAV = ["dashboard", "quotes", "contracts", "clients", "products", "packages", "settings"];
 // Na lista, aria-current="page"; na tela de um documento, a seção fica marcada como "true".
 const currentAttr = (k) =>
   route.page !== k ? "" : route.id == null ? ' aria-current="page"' : ' aria-current="true"';
@@ -638,8 +650,8 @@ function topbar(crumbs) {
 function bottomNav() {
   const item = (k, label, ic) =>
     `<a href="${buildHash({ page: k })}" class="tab-item${route.page === k ? " active" : ""}"${currentAttr(k)}>${icon(ic)}<span>${label}</span></a>`;
-  const moreActive = ["clients", "packages", "settings"].includes(route.page);
-  return `<nav class="bottom-nav" aria-label="Navegação principal">${item("dashboard", "Início", "dashboard")}${item("quotes", "Orçamentos", "quotes")}<button type="button" class="tab-item tab-new" popovertarget="new-menu">${icon("plus")}<span>Novo</span></button>${item("contracts", "Contratos", "contracts")}<button type="button" class="tab-item${moreActive ? " active" : ""}" popovertarget="more-menu">${icon("menu")}<span>Mais${moreActive ? `<span class="sr-only">, seção atual: ${labels[route.page]}</span>` : ""}</span></button></nav><div id="new-menu" class="sheet-menu" popover><p class="sheet-title">Criar</p><button type="button" data-new="quote">Novo orçamento</button><button type="button" data-new="contract">Novo contrato</button><button type="button" data-new="client">Novo cliente</button></div><div id="more-menu" class="sheet-menu" popover><a href="#/clientes">Clientes</a><a href="#/pacotes">Pacotes e preços</a><a href="#/configuracoes">Configurações</a><button type="button" data-action="logout">Sair da conta</button></div>`;
+  const moreActive = ["clients", "products", "packages", "settings"].includes(route.page);
+  return `<nav class="bottom-nav" aria-label="Navegação principal">${item("dashboard", "Início", "dashboard")}${item("quotes", "Orçamentos", "quotes")}<button type="button" class="tab-item tab-new" popovertarget="new-menu">${icon("plus")}<span>Novo</span></button>${item("contracts", "Contratos", "contracts")}<button type="button" class="tab-item${moreActive ? " active" : ""}" popovertarget="more-menu">${icon("menu")}<span>Mais${moreActive ? `<span class="sr-only">, seção atual: ${labels[route.page]}</span>` : ""}</span></button></nav><div id="new-menu" class="sheet-menu" popover><p class="sheet-title">Criar</p><button type="button" data-new="quote">Novo orçamento</button><button type="button" data-new="contract">Novo contrato</button><button type="button" data-new="client">Novo cliente</button></div><div id="more-menu" class="sheet-menu" popover><a href="#/clientes">Clientes</a><a href="#/produtos">Produtos</a><a href="#/pacotes">Pacotes e preços</a><a href="#/configuracoes">Configurações</a><button type="button" data-action="logout">Sair da conta</button></div>`;
 }
 function head(title, description, buttons = "") {
   return `<div class="page-head"><div><h1 tabindex="-1">${title}</h1><p>${description}</p></div><div class="actions">${buttons}</div></div>`;
@@ -675,6 +687,14 @@ function content(doc) {
         toolbar() +
         `<div class="panel" id="list">${clientTable()}</div>`,
     );
+  if (page === "products")
+    return view(
+      head(
+        "Produtos",
+        "Equipamentos e serviços avulsos. Cada produto define em qual quadro do contrato é impresso.",
+        newButton("product", "Novo produto"),
+      ) + productList(),
+    );
   if (page === "packages")
     return view(
       head("Pacotes e preços", "Serviços, equipamentos e valores de referência para os orçamentos.", newButton("package", "Novo pacote")) +
@@ -691,6 +711,33 @@ function content(doc) {
       toolbar(kind) +
       `<div class="panel" id="list">${docList(kind)}</div>`,
   );
+}
+// Produtos agrupados pelo quadro do contrato em que aparecem: o cadastro mostra
+// o mesmo agrupamento que vai sair impresso.
+function productList() {
+  if (!state.products.length)
+    return `<div class="list-cards">${empty(
+      "Monte seu catálogo",
+      "Cadastre caixas de som, luzes cênicas, mesas e serviços. Depois use esses produtos para montar pacotes e para acrescentar itens a um orçamento ou contrato.",
+      "product",
+      "Cadastrar produto",
+    )}</div>`;
+  const actions = (p) =>
+    `<button type="button" data-edit-product="${p.id}">Editar<span class="sr-only"> ${esc(p.name)}</span></button><button type="button" class="danger-outline" data-delete-product="${p.id}">Excluir<span class="sr-only"> ${esc(p.name)}</span></button>`;
+  const value = (p) => (Number(p.price) > 0 ? money(p.price) : "—");
+  return EQUIPMENT_CATEGORIES.filter((c) => state.products.some((p) => p.category === c.id))
+    .map((c) => {
+      const list = state.products.filter((p) => p.category === c.id);
+      return `<section class="panel product-group"><div class="panel-title"><h2>${esc(c.label)}</h2><span class="count">${list.length}</span></div><p class="hint">No contrato: ${esc(c.title)}</p><div class="table-wrap"><table><thead><tr><th scope="col">Produto</th><th scope="col">Valor de referência</th><th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${list
+        .map((p) => `<tr><td>${esc(p.name)}</td><td>${value(p)}</td><td><div class="rowactions">${actions(p)}</div></td></tr>`)
+        .join("")}</tbody></table></div><ul class="doc-cards" aria-label="Produtos de ${esc(c.label)}">${list
+        .map(
+          (p) =>
+            `<li class="doc-card"><div class="doc-card-head"><strong>${esc(p.name)}</strong></div><p class="doc-card-meta"><span>${value(p)}</span></p><div class="rowactions">${actions(p)}</div></li>`,
+        )
+        .join("")}</ul></section>`;
+    })
+    .join("");
 }
 const packageCard = (p) =>
   `<article class="panel package-detail"><h2>${esc(p.name)}</h2><p>${esc(p.description)}</p><p class="price">${money(p.price)}</p><p class="equipment">${esc(p.equipment)}</p><div class="card-actions"><button type="button" data-edit-package="${p.id}">Editar pacote<span class="sr-only"> ${esc(p.name)}</span></button><button type="button" class="danger-outline" data-delete-package="${p.id}">Excluir<span class="sr-only"> pacote ${esc(p.name)}</span></button></div></article>`;
@@ -1067,16 +1114,168 @@ function editClient(c = {}, onSaved, { notice = "", dialog = modal } = {}) {
     { onSaved, submitLabel: "Salvar cliente", notice, dialog, successMessage: c.id ? "Cliente salvo." : "Cliente cadastrado." },
   );
 }
-function editPackage(p = {}) {
+function editProduct(p = {}) {
   openModal(
+    p.id ? "Editar produto" : "Novo produto",
+    field("Nome do produto", "name", p.name, "text", true, true, {
+      hint: "Como deve sair impresso no contrato. Ex.: Moving head Beam 200.",
+    }) +
+      select(
+        "Quadro no contrato",
+        "category",
+        EQUIPMENT_CATEGORIES.map((c) => [c.id, c.label]),
+        p.category || "other",
+        true,
+        { full: true, hint: "Define em qual coluna do quadro de equipamentos o item é impresso." },
+      ) +
+      moneyField("Valor de referência", "price", p.price, false, {
+        hint: "Opcional. Serve para somar os itens e comparar com o preço do pacote; não aparece nos documentos.",
+      }),
+    (b) => api("/records/products", { ...b, id: p.id, price: parseMoney(b.price) ?? 0 }),
+    { submitLabel: "Salvar produto" },
+  );
+}
+async function deleteProduct(id) {
+  const p = state.products.find((x) => x.id === id);
+  if (!p) return;
+  const ok = await confirmAction({
+    title: "Excluir produto?",
+    message: `<strong>${esc(p.name)}</strong> sai do catálogo. Pacotes, orçamentos e contratos que já usam este item continuam com o nome e o quadro gravados. Esta ação não pode ser desfeita.`,
+    confirmLabel: "Excluir produto",
+  });
+  if (!ok) return;
+  try {
+    await api(`/records/products/${id}`, null, { method: "DELETE" });
+  } catch (error) {
+    return toast(error.message, "error");
+  }
+  pendingFocus = "heading";
+  await load();
+  toast(`Produto ${p.name} excluído.`);
+}
+
+// ---------- Itens do catálogo, em pacotes e em documentos ----------
+// O item guarda nome e quadro junto da escolha: editar ou excluir o produto
+// depois não muda um documento já emitido.
+// Lê as linhas de itens do formulário. Usado ao salvar e para guardar o rascunho.
+function readItemRows(form) {
+  return $$(".item-row", form).map((row) => {
+    const select = $("[data-item-product]", row),
+      option = select.selectedOptions[0];
+    return {
+      productId: /^\d+$/.test(select.value) ? Number(select.value) : null,
+      name: option?.dataset.name || "",
+      category: option?.dataset.category || "other",
+      qty: Number($("[data-item-qty]", row).value) || 1,
+      price: Number(option?.dataset.price) || 0,
+    };
+  });
+}
+function itemsBlock(hint) {
+  const empty = !state.products.length;
+  return `<div class="field full items" id="items-field"><span class="label" id="items-label">Itens do catálogo</span><p class="hint" id="items-hint">${hint}${empty ? " Nenhum produto cadastrado ainda: cadastre em <strong>Produtos</strong> para montar a lista por aqui." : ""}</p><div class="item-head" id="item-head" aria-hidden="true" hidden><span>Produto</span><span>Qtd.</span><span>Quadro no contrato</span><span></span></div><div id="items" role="group" aria-labelledby="items-label" aria-describedby="items-hint"></div><p class="items-sum" id="items-sum"></p><div class="item-actions"><button type="button" id="additem"${empty ? " disabled" : ""}><span aria-hidden="true">＋</span> Adicionar item</button></div></div>`;
+}
+function bindItems(ctrl, initial = []) {
+  const form = ctrl.form,
+    list = $("#items", form);
+  if (!list) return { read: () => [], fill: () => {}, count: () => 0 };
+  const options = (item) => {
+    const current = item?.productId == null ? null : state.products.find((p) => p.id === Number(item.productId));
+    const out = state.products.map(
+      (p) =>
+        `<option value="${p.id}" data-name="${esc(p.name)}" data-category="${esc(p.category || "other")}" data-price="${Number(p.price) || 0}"${current?.id === p.id ? " selected" : ""}>${esc(p.name)}</option>`,
+    );
+    // Item gravado cujo produto saiu do catálogo: mantém o que está no documento.
+    if (item?.name && !current)
+      out.unshift(
+        `<option value="fora" data-name="${esc(item.name)}" data-category="${esc(item.category || "other")}" data-price="${Number(item.price) || 0}" selected>${esc(item.name)} (fora do catálogo)</option>`,
+      );
+    return out.join("");
+  };
+  const showCategory = (row) => {
+    const option = $("[data-item-product]", row).selectedOptions[0];
+    $("[data-item-category]", row).textContent = option ? categoryLabel(option.dataset.category) : "";
+  };
+  const read = () => readItemRows(form);
+  const refresh = () => {
+    const rows = $$(".item-row", list);
+    rows.forEach((row, i) => {
+      $("[data-item-product]", row).setAttribute("aria-label", `Produto do item ${i + 1}`);
+      $("[data-item-qty]", row).setAttribute("aria-label", `Quantidade do item ${i + 1}`);
+      $("[data-remove-item]", row).setAttribute("aria-label", `Remover o item ${i + 1}`);
+    });
+    $("#item-head", form).hidden = !rows.length;
+    const total = itemsTotal(read());
+    $("#items-sum", form).textContent = rows.length
+      ? total > 0
+        ? `${rows.length} ${rows.length === 1 ? "item" : "itens"} · soma dos valores de referência: ${money(total)}. O preço é definido à parte.`
+        : `${rows.length} ${rows.length === 1 ? "item" : "itens"}.`
+      : "";
+  };
+  const addRow = (item = {}) => {
+    const row = document.createElement("div");
+    row.className = "item-row";
+    row.innerHTML = `<select data-item-product>${options(item)}</select><input type="number" min="1" max="999" step="1" inputmode="numeric" value="${Number(item.qty) || 1}" data-item-qty><span class="item-category" data-item-category></span><button type="button" class="icon-button" data-remove-item>×</button>`;
+    list.append(row);
+    showCategory(row);
+    refresh();
+    return row;
+  };
+  $("#additem", form).onclick = () => {
+    $("[data-item-product]", addRow()).focus();
+    ctrl.changed();
+  };
+  list.addEventListener("click", (event) => {
+    const button = event.target.closest("[data-remove-item]");
+    if (!button) return;
+    button.closest(".item-row").remove();
+    refresh();
+    ctrl.changed();
+    ($("[data-remove-item]", list) || $("#additem", form)).focus();
+  });
+  list.addEventListener("change", (event) => {
+    const row = event.target.closest(".item-row");
+    if (row) showCategory(row);
+    refresh();
+  });
+  list.addEventListener("input", refresh);
+  const fill = (items) => {
+    list.innerHTML = "";
+    for (const item of items || []) addRow(item);
+    refresh();
+  };
+  fill(initial);
+  return { read, fill, count: () => $$(".item-row", list).length };
+}
+function editPackage(p = {}) {
+  const items = p.items || [];
+  // Pacote antigo, só com a lista em texto: o texto vira o campo de itens soltos,
+  // para nada ser perdido ao passar a usar o catálogo.
+  const extra = p.equipmentExtra ?? (items.length ? "" : (p.equipment ?? ""));
+  const ctrl = openModal(
     p.id ? "Editar pacote" : "Novo pacote",
     field("Nome do pacote", "name", p.name, "text", true) +
       moneyField("Preço", "price", p.price, true) +
       area("Descrição", "description", p.description) +
-      area("Equipamentos e serviços", "equipment", p.equipment, true, { hint: "Um item por linha." }),
-    (b) => api("/records/packages", { ...b, id: p.id, price: parseMoney(b.price) }),
+      itemsBlock("Monte o pacote com os produtos do catálogo. O quadro de cada item vem do cadastro do produto.") +
+      area("Outros itens", "equipmentExtra", extra, true, {
+        hint: "Uma linha por item, para o que não está no catálogo. Ex.: Transporte e montagem.",
+      }),
+    (b) => {
+      const chosen = cleanItems(list.read());
+      return api("/records/packages", {
+        ...b,
+        id: p.id,
+        price: parseMoney(b.price),
+        items: chosen,
+        equipmentExtra: String(b.equipmentExtra || "").trim(),
+        equipment: equipmentText(chosen, b.equipmentExtra),
+      });
+    },
     { submitLabel: "Salvar pacote" },
   );
+  const list = bindItems(ctrl, items);
+  ctrl.markPristine();
 }
 // Sem clientes cadastrados, o próprio campo Cliente oferece o cadastro (sem sair do formulário).
 // Ficha do evento no PDF do contrato (formato do modelo da AOF). Todos opcionais.
@@ -1118,7 +1317,9 @@ function editDoc(type, d = {}, { notice = "", draftId } = {}) {
     venue: t.venue,
     packageId: "",
     packageName: offer.name,
-    equipment: offer.equipment,
+    // Os modelos descrevem os equipamentos em texto; viram itens soltos, e o
+    // catálogo entra por cima quando o usuário acrescenta produtos.
+    equipmentExtra: offer.equipment,
     cashTotal: offer.cashPrice,
     installmentTotal: offer.installmentPrice,
     installmentCount: offer.installmentCount,
@@ -1132,6 +1333,13 @@ function editDoc(type, d = {}, { notice = "", draftId } = {}) {
     notes: [offer.description, t.reservationNotes].filter(Boolean).join("\n\n"),
   });
   const data = template && isNew ? { ...templateDefaults(template, initialOffer), ...d } : { ...d };
+  // Documento novo herda os itens do pacote de referência; documento antigo, que
+  // só tem a lista em texto, mostra esse texto como itens soltos, sem perder nada.
+  const initialItems = data.items ?? (isNew ? p.items : null) ?? [];
+  const initialExtra =
+    data.equipmentExtra ??
+    (isNew ? p.equipmentExtra : null) ??
+    (initialItems.length ? "" : (data.equipment ?? p.equipment ?? ""));
   if (isQuote && isNew && !data.validUntil) data.validUntil = addDays(today(), validityDays());
   // Sem cliente pré-selecionado: a escolha é sempre explícita.
   const selectedClientId = d.clientId ?? d.client?.id ?? "";
@@ -1211,13 +1419,11 @@ function editDoc(type, d = {}, { notice = "", draftId } = {}) {
     "packageId",
     [["", "Personalizado"], ...state.packages.map((pk) => [pk.id, pk.name])],
     template ? "" : isNew ? (data.packageId ?? p.id) : data.packageId,
-  )}${field("Nome do pacote / serviço", "packageName", data.packageName ?? p.name, "text", true)}${area(
-    "Equipamentos e serviços incluídos",
-    "equipment",
-    data.equipment ?? p.equipment,
-    true,
-    { hint: "Um item por linha." },
-  )}${quotePriceFields}${moneyField("Valor total do documento", "total", data.total ?? p.price, true)}${moneyField(
+  )}${field("Nome do pacote / serviço", "packageName", data.packageName ?? p.name, "text", true)}${itemsBlock(
+    `Escolha os produtos deste evento. O quadro de cada item vem do cadastro do produto e define onde ele é impresso no contrato.`,
+  )}${area("Outros itens", "equipmentExtra", initialExtra, true, {
+    hint: "Uma linha por item, para o que não está no catálogo.",
+  })}${quotePriceFields}${moneyField("Valor total do documento", "total", data.total ?? p.price, true)}${moneyField(
     "Hora adicional",
     "extraHour",
     data.extraHour ?? 500,
@@ -1278,6 +1484,9 @@ function editDoc(type, d = {}, { notice = "", draftId } = {}) {
       type === "contract"
         ? Object.fromEntries(CONTRACT_SHEET_FIELDS.map(([name]) => [name, String(b[name] ?? "").trim()]))
         : {};
+    // A lista em texto continua gravada para o orçamento e as telas; os itens
+    // guardam o quadro de cada produto, que o contrato imprime sem adivinhar.
+    const chosen = cleanItems(items.read());
     // Parte do documento original para não perder campos que não estão no formulário
     // (por exemplo, o vínculo do contrato com o orçamento de origem).
     return api("/records/documents", {
@@ -1292,6 +1501,9 @@ function editDoc(type, d = {}, { notice = "", draftId } = {}) {
       extraHour: optionalMoney(b.extraHour) ?? 0,
       imageConsent: b.imageConsent === "on",
       clauses: b.clauses || d.clauses || state.settings.clauses,
+      items: chosen,
+      equipmentExtra: String(b.equipmentExtra || "").trim(),
+      equipment: equipmentText(chosen, b.equipmentExtra),
       payments,
     });
   };
@@ -1314,6 +1526,8 @@ function editDoc(type, d = {}, { notice = "", draftId } = {}) {
     return value == null || Number.isNaN(value) ? null : value;
   };
   const sameCents = (a, b) => Math.round(a * 100) === Math.round(b * 100);
+
+  const items = bindItems(ctrl, initialItems);
 
   // Vencimentos com soma em tempo real.
   const clearPaymentError = () => clearError($("[data-group-error]", form));
@@ -1423,7 +1637,9 @@ function editDoc(type, d = {}, { notice = "", draftId } = {}) {
     if (!pk) return;
     setValue("packageName", pk.name);
     setValue("total", pk.price);
-    setValue("equipment", pk.equipment);
+    // Pacote antigo sem itens: a lista em texto vai para os itens soltos.
+    items.fill(pk.items || []);
+    setValue("equipmentExtra", pk.equipmentExtra ?? ((pk.items || []).length ? "" : (pk.equipment ?? "")));
     updatePaymentSum();
   };
 
@@ -1477,7 +1693,7 @@ function editDoc(type, d = {}, { notice = "", draftId } = {}) {
       if (!offer) return;
       for (const [name, value] of Object.entries({
         packageName: offer.name,
-        equipment: offer.equipment,
+        equipmentExtra: offer.equipment,
         cashTotal: offer.cashPrice,
         installmentTotal: offer.installmentPrice,
         installmentCount: offer.installmentCount,
@@ -1508,6 +1724,7 @@ function editDoc(type, d = {}, { notice = "", draftId } = {}) {
     }
     paymentList.innerHTML = "";
     for (const [dateValue, amount] of values.__payments || []) addPayment({ date: dateValue, amount });
+    if (values.__items) items.fill(values.__items);
     const sheet = $("#more-fields", form);
     if (sheet && CONTRACT_SHEET_FIELDS.some(([name]) => input(name)?.value.trim())) sheet.open = true;
     combo.syncLabel();
@@ -1518,6 +1735,7 @@ function editDoc(type, d = {}, { notice = "", draftId } = {}) {
   updatePrice();
   ctrl.markPristine();
   ctrl.offerDraft(fillForm);
+  return ctrl;
 }
 // ---------- Campo Cliente com busca e cadastro na hora (padrão combobox do WAI-ARIA) ----------
 function clientCombo(selectedId, snapshot) {
@@ -1714,9 +1932,25 @@ function docDetail(d) {
       ["Endereço", esc(snap.address || "")],
     ]) + (client ? "" : '<p class="hint">Cadastro do cliente não encontrado; dados registrados na emissão.</p>'),
   );
+  // Com itens do catálogo, mostra agrupado pelo quadro do contrato, para conferir
+  // antes de emitir se cada coisa vai sair na coluna certa.
+  const grouped = (d.items || []).length
+    ? EQUIPMENT_CATEGORIES.filter((c) => d.items.some((i) => i.category === c.id))
+        .map(
+          (c) =>
+            `<div class="service-group"><h3>${esc(c.label)}</h3><ul class="plain-list bullets">${d.items
+              .filter((i) => i.category === c.id)
+              .map((i) => `<li>${esc(qtyLabel(i.qty))} ${esc(i.name)}</li>`)
+              .join("")}</ul></div>`,
+        )
+        .join("") +
+      (d.equipmentExtra
+        ? `<div class="service-group"><h3>Outros itens</h3><ul class="plain-list bullets">${String(d.equipmentExtra).split("\n").filter(Boolean).map((x) => `<li>${esc(x)}</li>`).join("")}</ul></div>`
+        : "")
+    : `<ul class="plain-list bullets">${String(d.equipment || "").split("\n").filter(Boolean).map((x) => `<li>${esc(x)}</li>`).join("")}</ul>`;
   const services = panel(
     "Serviços",
-    `<p class="detail-strong">${esc(d.packageName || "")}</p><ul class="plain-list bullets">${String(d.equipment || "").split("\n").filter(Boolean).map((x) => `<li>${esc(x)}</li>`).join("")}</ul>${d.notes ? `<p class="detail-notes">${esc(d.notes)}</p>` : ""}`,
+    `<p class="detail-strong">${esc(d.packageName || "")}</p>${grouped}${d.notes ? `<p class="detail-notes">${esc(d.notes)}</p>` : ""}`,
   );
   const link = isQuote
     ? contract
@@ -2136,11 +2370,16 @@ function onClick(event) {
   if (ds.action === "clear-filters") return clearFilters();
   if (ds.filter) return setFilter(ds.filter);
   if (ds.new)
-    return ds.new === "client" ? editClient() : ds.new === "package" ? editPackage() : ds.new === "quote" ? openPicker() : editDoc(ds.new);
+    if (ds.new === "client") return editClient();
+    if (ds.new === "product") return editProduct();
+    if (ds.new === "package") return editPackage();
+    return ds.new === "quote" ? openPicker() : editDoc(ds.new);
   if (ds.newFor) return openPicker({ clientId: ds.newFor });
   if (ds.quoteTemplate) return editDoc("quote", { templateId: ds.quoteTemplate });
   if (ds.editClient) return findClient(ds.editClient) && editClient(findClient(ds.editClient));
   if (ds.deleteClient) return deleteClient(id(ds.deleteClient));
+  if (ds.editProduct) return editProduct(state.products.find((p) => p.id === id(ds.editProduct)));
+  if (ds.deleteProduct) return deleteProduct(id(ds.deleteProduct));
   if (ds.editPackage) return editPackage(state.packages.find((p) => p.id === id(ds.editPackage)));
   if (ds.deletePackage) return deletePackage(id(ds.deletePackage));
   if (ds.editDoc) return findDoc(ds.editDoc) && editDoc(findDoc(ds.editDoc).type, findDoc(ds.editDoc));
