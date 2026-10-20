@@ -95,6 +95,10 @@ const importDir = mkdtempSync(join(tmpdir(), "aof-import-"));
 const desktop = ps("[Environment]::GetFolderPath('Desktop')");
 const programs = ps("[Environment]::GetFolderPath('Programs')");
 const links = [join(desktop, `${APP_NAME}.lnk`), join(programs, `${APP_NAME}.lnk`)];
+// Atalhos que já existiam antes da verificação: sinal de instalação real nesta
+// máquina, que não pode ser mexida.
+const installedHere = links.filter((link) => existsSync(link));
+let touchedLinks = false;
 let app;
 
 try {
@@ -223,22 +227,6 @@ try {
   check("segunda execução reaproveita a janela aberta", reused && second.code() === 0 && second.text().includes(`:${port}`));
   await first.stop();
 
-  console.log("\n--- Instalação por usuário ---");
-  const installed = join(fakeHome, "Programs", APP_NAME, `${APP_NAME}.exe`);
-  check("nenhum atalho antes de instalar", links.every((l) => !existsSync(l)));
-  const install = cli(["--instalar"], { LOCALAPPDATA: fakeHome });
-  check("--instalar conclui", install.status === 0, install.out.trim().split("\n")[0]);
-  check("programa copiado para a pasta do usuário", existsSync(installed) && statSync(installed).size === statSync(EXE).size);
-  for (const link of links) check(`atalho em ${link.includes("Desktop") ? "área de trabalho" : "menu Iniciar"}`, existsSync(link));
-  const target = ps(`(New-Object -ComObject WScript.Shell).CreateShortcut('${links[0]}').TargetPath`);
-  check(
-    "atalho aponta para a cópia instalada",
-    existsSync(target) && realpathSync.native(target).toLowerCase() === realpathSync.native(installed).toLowerCase(),
-    target,
-  );
-  check("atalho abre minimizado", ps(`(New-Object -ComObject WScript.Shell).CreateShortcut('${links[0]}').WindowStyle`) === "7");
-  check("cópia instalada executa", spawnSync(installed, ["--versao"], { encoding: "utf8", windowsHide: true }).status === 0);
-
   console.log("\n--- Importação de dados ---");
   // Banco de origem com registros deixados no WAL, sem consolidar: é o estado
   // real de um sistema em uso, e uma cópia simples do arquivo perderia tudo isso.
@@ -258,18 +246,44 @@ try {
   check("--importar sem caminho orienta", /Informe a pasta/.test(cli(["--importar"], { DATA_DIR: target2 }).out));
   rmSync(target2, { recursive: true, force: true });
 
-  console.log("\n--- Desinstalação ---");
-  const remove = cli(["--desinstalar"], { LOCALAPPDATA: fakeHome });
-  check("--desinstalar conclui", remove.status === 0, remove.out.trim().split("\n")[0]);
-  check("atalhos removidos", links.every((l) => !existsSync(l)));
-  check("pasta do programa removida", !existsSync(join(fakeHome, "Programs", APP_NAME)));
-  check("avisa que os dados continuam", remove.out.includes("Seus dados continuam"));
+  console.log("\n--- Instalação por usuário ---");
+  // A instalação de teste usa uma pasta temporária, mas os atalhos vão para a
+  // área de trabalho e o menu Iniciar de verdade, e a desinstalação os apaga.
+  // Com o sistema já instalado nesta máquina, isso destruiria os atalhos do
+  // usuário: nesse caso a seção é pulada em vez de executada.
+  if (installedHere.length) {
+    console.log(`PULADO: já existe atalho do ${APP_NAME} nesta máquina.`);
+    for (const link of installedHere) console.log(`  ${link}`);
+    console.log(`Para verificar esta parte, desinstale antes: "${APP_NAME}.exe" --desinstalar`);
+  } else {
+    const installed = join(fakeHome, "Programs", APP_NAME, `${APP_NAME}.exe`);
+    touchedLinks = true;
+    const install = cli(["--instalar"], { LOCALAPPDATA: fakeHome });
+    check("--instalar conclui", install.status === 0, install.out.trim().split("\n")[0]);
+    check("programa copiado para a pasta do usuário", existsSync(installed) && statSync(installed).size === statSync(EXE).size);
+    for (const link of links) check(`atalho em ${link.includes("Desktop") ? "área de trabalho" : "menu Iniciar"}`, existsSync(link));
+    const target = ps(`(New-Object -ComObject WScript.Shell).CreateShortcut('${links[0]}').TargetPath`);
+    check(
+      "atalho aponta para a cópia instalada",
+      existsSync(target) && realpathSync.native(target).toLowerCase() === realpathSync.native(installed).toLowerCase(),
+      target,
+    );
+    check("atalho abre minimizado", ps(`(New-Object -ComObject WScript.Shell).CreateShortcut('${links[0]}').WindowStyle`) === "7");
+    check("cópia instalada executa", spawnSync(installed, ["--versao"], { encoding: "utf8", windowsHide: true }).status === 0);
+
+    console.log("\n--- Desinstalação ---");
+    const remove = cli(["--desinstalar"], { LOCALAPPDATA: fakeHome });
+    check("--desinstalar conclui", remove.status === 0, remove.out.trim().split("\n")[0]);
+    check("atalhos removidos", links.every((l) => !existsSync(l)));
+    check("pasta do programa removida", !existsSync(join(fakeHome, "Programs", APP_NAME)));
+    check("avisa que os dados continuam", remove.out.includes("Seus dados continuam"));
+  }
 } catch (error) {
   check("verificação sem erro", false, error.message);
 } finally {
   await app?.stop();
-  // Rede de segurança: não deixar atalho de teste na máquina.
-  for (const link of links) rmSync(link, { force: true });
+  // Rede de segurança: apaga só os atalhos que esta verificação criou.
+  if (touchedLinks) for (const link of links) rmSync(link, { force: true });
   for (const dir of [dataDir, fakeHome, importDir]) rmSync(dir, { recursive: true, force: true });
   const failed = results.filter((r) => !r.ok).length;
   console.log(`\n${results.length - failed}/${results.length} verificações passaram`);
