@@ -1,10 +1,8 @@
-import { existsSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { tryAsset } from "./app-env.js";
 
 // Contrato no formato do modelo da AOF: moldura e cabeçalho com logos em todas as
 // páginas, ficha do evento em tabela, cláusulas numeradas, pacote e programação
 // financeira, equipamentos por categoria, local e data, assinaturas e rodapé.
-const assets = fileURLToPath(new URL("./public/quote-assets/", import.meta.url));
 const C = {
   text: "#111111",
   muted: "#3a3a3a",
@@ -41,7 +39,8 @@ const issueDate = (iso) =>
   );
 // "Abraão Ferreira · DJ Kaio Jansen" → "Abraão Ferreira (DJ Kaio Jansen)", como no modelo.
 const person = (v) => String(v || "").trim().replace(/\s*·\s*(.+)$/, " ($1)");
-const firstAsset = (...names) => names.map((name) => assets + name).find(existsSync) || null;
+// Primeiro logo disponível, já como Buffer: funciona em disco e dentro do executável.
+const firstAsset = (...names) => names.reduce((found, name) => found || tryAsset(`public/quote-assets/${name}`), null);
 
 // Cidade do endereço da empresa: o trecho antes da UF ("Blumenau, SC" ou "Blumenau · SC").
 export function cityOf(address) {

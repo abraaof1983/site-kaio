@@ -339,6 +339,26 @@ Medições depois da Fase 1, com as mesmas telas e dados fictícios (60 verifica
 
 Continua para a Fase 2: o tamanho do formulário de orçamento (3,5 telas; item 2.1).
 
+### Instalação local no Windows · implementada
+
+Muda o modo de entrega: em vez de pedir Node.js, terminal e `npm`, o sistema passa a ser um programa instalável no computador de quem usa. Resolve H1: a abertura não depende mais de `npm ci`, de Internet nem da pasta do projeto.
+
+- `npm run build:exe` gera um executável único (Node SEA): runtime do Node, código, fontes, telas e imagens dentro de um só arquivo de ~97 MB. Instalar é copiar um arquivo.
+- Instalação por usuário, **sem administrador**: o programa vai para `%LOCALAPPDATA%\Programs\AOF Studio`, com atalhos no menu Iniciar e na área de trabalho. Nada em `Program Files`, nada no registro, nenhum serviço em segundo plano.
+- Banco local em `%LOCALAPPDATA%\AOF Studio\data`, fora da pasta do programa: desinstalar não apaga dados, e atualizar por cima não os toca.
+- Escuta só em `127.0.0.1`, em vez de `0.0.0.0`: a rede não alcança o sistema nem o banco. Antes, qualquer máquina na mesma rede chegava ao servidor.
+- Porta escolhida entre 3000 e 3019, e abrir o atalho duas vezes reaproveita a janela existente em vez de subir outra cópia sobre o mesmo banco.
+- `--importar` traz o banco de uma instalação anterior usando o backup do SQLite, que inclui o que estiver no diário WAL. No banco de teste, uma cópia simples do arquivo perderia registros; a importação trouxe os 25 de 25.
+- O executável se identifica como AOF Studio nas propriedades do Windows, com ícone próprio, e sai sem assinatura em vez de com a assinatura do Node quebrada.
+
+Para o código rodar igual dentro e fora do executável, as fontes e imagens passaram a ser lidas por nome de recurso (`app-env.js`), o PDFKit recebe fontes e imagens como Buffer — sem isso ele buscaria as métricas da Helvetica em disco — e `express.static` deu lugar a um servidor de recursos embutidos com ETag e proteção contra escapar da pasta.
+
+Verificado por `npm run verify:exe`: 51 verificações, incluindo recusa de conexão pela rede, travessia de diretório, PDFs com fonte embutida, instalação, desinstalação e importação. Mais 11 verificações da interface em navegador real, sem erro de console.
+
+Ponto que ficou de fora: a tipografia da interface continua vindo do Google Fonts (`@import` no `style.css`). O sistema abre e funciona sem Internet, caindo para as fontes de reserva, mas há uma chamada externa a cada abertura — incoerente com instalação local e passível de ser eliminada embutindo as fontes (DM Sans e Manrope são OFL).
+
+O que isto **não** resolve, e passa a ser decisão consciente: H2 continua aberto. Escutando só em `127.0.0.1`, o celular não acessa o sistema nem na mesma rede, e o backup segue manual (copiar a pasta de dados com o programa fechado). Acesso pelo celular e backup automático exigem hospedagem com HTTPS, que é o caminho oposto ao da instalação local; se isso voltar a ser prioridade, `HOST` e `COOKIE_SECURE` já existem para esse cenário.
+
 ### Contrato no formato do modelo da AOF · implementado
 
 Resolve G5 e parte de 2.9. O PDF do contrato (`contract-pdf.js`) segue o contrato modelo da empresa:

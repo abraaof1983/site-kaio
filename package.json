@@ -4,11 +4,21 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "node server.js",
-    "test": "node --test"
+    "start": "node main.js",
+    "test": "node --test",
+    "build:exe": "node build/build-exe.mjs",
+    "verify:exe": "node build/verify-exe.mjs"
+  },
+  "engines": {
+    "node": ">=24.0.0"
   },
   "dependencies": {
     "express": "^5.1.0",
     "pdfkit": "^0.17.2"
+  },
+  "devDependencies": {
+    "esbuild": "0.28.2",
+    "postject": "1.0.0-alpha.6",
+    "rcedit": "4.0.1"
   }
 }
