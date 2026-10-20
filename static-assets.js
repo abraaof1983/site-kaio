@@ -1,6 +1,6 @@
 import { createHash } from "node:crypto";
 import { extname, posix } from "node:path";
-import { assetExists, assetList, packaged, readAsset } from "./app-env.js";
+import { assetList, packaged, readAsset } from "./app-env.js";
 
 // Serve as telas e imagens da pasta public. Substitui express.static porque, no
 // executável único, esses arquivos não existem em disco: ficam embutidos no .exe.
@@ -37,22 +37,27 @@ export function serveAssets(prefix = "public") {
   // Dentro do executável a lista é fixa; em desenvolvimento consulta o disco,
   // para arquivos novos aparecerem sem recompilar.
   const known = packaged ? new Set(assetList(prefix)) : null;
-  const available = (name) => (known ? known.has(name) : assetExists(name));
+  const available = (name) => (known ?? new Set(assetList(prefix))).has(name);
   return function assets(req, res, next) {
     if (req.method !== "GET" && req.method !== "HEAD") return next();
     let path;
     try {
-      path = decodeURIComponent(req.path);
+      path = decodeURIComponent(req.path).replace(/\\/g, "/");
     } catch {
       return next();
     }
+    if (path.includes("\0") || path.split("/").some((part) => part === ".."))
+      return next();
     if (path.endsWith("/")) path += "index.html";
     // normalize resolve ".." antes da checagem, então não há como sair da pasta.
     const name = posix.normalize(`${prefix}${path}`);
     if (!name.startsWith(`${prefix}/`) || !available(name)) return next();
     const body = readAsset(name);
     const tag = etag(name, body);
-    res.setHeader("Content-Type", TYPES[extname(name).toLowerCase()] || "application/octet-stream");
+    res.setHeader(
+      "Content-Type",
+      TYPES[extname(name).toLowerCase()] || "application/octet-stream",
+    );
     res.setHeader("X-Content-Type-Options", "nosniff");
     res.setHeader("Cache-Control", "no-cache");
     res.setHeader("ETag", tag);

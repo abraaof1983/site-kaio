@@ -1,5 +1,14 @@
 import { spawnSync } from "node:child_process";
-import { copyFileSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, statSync, writeFileSync } from "node:fs";
+import {
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  rmSync,
+  statSync,
+  writeFileSync,
+} from "node:fs";
 import { join, relative, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build } from "esbuild";
@@ -23,17 +32,27 @@ const exe = join(stage, `${APP_NAME}.exe`);
 const FUSE = "NODE_SEA_FUSE_fce680ab2cc467b6e072b8b5df1996b2";
 const step = (text) => console.log(`\n== ${text}`);
 
-function run(label, file, args) {
-  const r = spawnSync(file, args, { cwd: root, encoding: "utf8", windowsHide: true });
+function run(label, file, args, env = {}) {
+  const r = spawnSync(file, args, {
+    cwd: root,
+    env: { ...process.env, ...env },
+    encoding: "utf8",
+    windowsHide: true,
+  });
   if (r.error) throw Error(`${label}: ${r.error.message}`);
-  if (r.status !== 0) throw Error(`${label} falhou (${r.status}):\n${r.stdout || ""}${r.stderr || ""}`);
+  if (r.status !== 0)
+    throw Error(
+      `${label} falhou (${r.status}):\n${r.stdout || ""}${r.stderr || ""}`,
+    );
   return r.stdout || "";
 }
 
 function filesUnder(dir) {
   const found = [];
   const walk = (current) => {
-    for (const entry of readdirSync(join(root, current), { withFileTypes: true })) {
+    for (const entry of readdirSync(join(root, current), {
+      withFileTypes: true,
+    })) {
       const next = `${current}/${entry.name}`;
       if (entry.isDirectory()) walk(next);
       else found.push(next);
@@ -46,10 +65,27 @@ function filesUnder(dir) {
 const kb = (bytes) => `${(bytes / 1024).toFixed(0)} KB`;
 const mb = (bytes) => `${(bytes / 1024 / 1024).toFixed(1)} MB`;
 
+// O Node SEA precisa do runtime do próprio sistema de destino. Falhar antes da
+// limpeza preserva uma distribuição anterior quando o comando é usado por engano
+// em Linux/macOS ou com outro Node.
+if (
+  process.platform !== "win32" ||
+  Number(process.versions.node.split(".")[0]) !== 24
+)
+  throw Error(
+    "Compile no Windows com o Node.js 24 oficial. A saída anterior foi preservada.",
+  );
+
 step("Limpando a saída anterior");
 // O Windows costuma manter o executável preso por alguns instantes depois do uso
 // (antivírus, Explorer); por isso as tentativas repetidas.
-const clean = (path) => rmSync(path, { recursive: true, force: true, maxRetries: 20, retryDelay: 250 });
+const clean = (path) =>
+  rmSync(path, {
+    recursive: true,
+    force: true,
+    maxRetries: 20,
+    retryDelay: 250,
+  });
 clean(work);
 clean(dist);
 mkdirSync(work, { recursive: true });
@@ -77,7 +113,9 @@ const result = await build({
   metafile: true,
 });
 console.log(`${relative(root, bundle)}: ${kb(statSync(bundle).size)}`);
-const bundled = Object.keys(result.metafile.inputs).filter((f) => f.includes("node_modules")).length;
+const bundled = Object.keys(result.metafile.inputs).filter((f) =>
+  f.includes("node_modules"),
+).length;
 console.log(`módulos embutidos de node_modules: ${bundled}`);
 
 step("Reunindo os recursos");
@@ -91,7 +129,10 @@ for (const name of [
   ...filesUnder("public"),
 ])
   assets[name] = join(root, name);
-const assetBytes = Object.values(assets).reduce((sum, path) => sum + statSync(path).size, 0);
+const assetBytes = Object.values(assets).reduce(
+  (sum, path) => sum + statSync(path).size,
+  0,
+);
 console.log(`${Object.keys(assets).length} recursos · ${mb(assetBytes)}`);
 
 step("Preparando o pacote do executável");
@@ -111,7 +152,12 @@ writeFileSync(
     2,
   ),
 );
-console.log(run("Empacotamento", process.execPath, ["--experimental-sea-config", seaConfig]).trim());
+console.log(
+  run("Empacotamento", process.execPath, [
+    "--experimental-sea-config",
+    seaConfig,
+  ]).trim(),
+);
 console.log(`${relative(root, blob)}: ${mb(statSync(blob).size)}`);
 
 // O node.exe vem assinado pela Node.js Foundation. Como o executável é alterado
@@ -120,7 +166,8 @@ console.log(`${relative(root, blob)}: ${mb(statSync(blob).size)}`);
 function stripSignature(path) {
   const file = readFileSync(path);
   const pe = file.readUInt32LE(0x3c);
-  if (file.toString("latin1", pe, pe + 4) !== "PE\0\0") throw Error("Formato de executável inesperado.");
+  if (file.toString("latin1", pe, pe + 4) !== "PE\0\0")
+    throw Error("Formato de executável inesperado.");
   const optional = pe + 24;
   const plus = file.readUInt16LE(optional) === 0x20b; // PE32+ (64 bits)
   const security = optional + (plus ? 112 : 96) + 4 * 8; // 5ª entrada: tabela de certificados
@@ -138,7 +185,9 @@ function stripSignature(path) {
 step("Criando o executável");
 copyFileSync(process.execPath, exe);
 const stripped = stripSignature(exe);
-console.log(`assinatura original removida: ${stripped ? kb(stripped) : "nenhuma"}`);
+console.log(
+  `assinatura original removida: ${stripped ? kb(stripped) : "nenhuma"}`,
+);
 
 // Ícone e propriedades antes de injetar o pacote: o rcedit reescreve a tabela de
 // recursos, e fazê-lo depois poderia deslocar o recurso com o código do sistema.
@@ -156,50 +205,73 @@ await rcedit(exe, {
     OriginalFilename: `${APP_NAME}.exe`,
   },
 });
-if (!existsSync(icon)) console.log("sem ícone próprio: gere com node build/make-icon.mjs");
+if (!existsSync(icon))
+  console.log("sem ícone próprio: gere com node build/make-icon.mjs");
 
 if (!readFileSync(exe).includes(FUSE))
-  throw Error(`O node.exe usado não tem a marca ${FUSE}. Use o Node 24 oficial para Windows.`);
+  throw Error(
+    `O node.exe usado não tem a marca ${FUSE}. Use o Node 24 oficial para Windows.`,
+  );
 await inject(exe, "NODE_SEA_BLOB", readFileSync(blob), { sentinelFuse: FUSE });
+// O código continua sendo Node, mas o Windows deve abrir uma aplicação gráfica,
+// sem criar console no duplo clique. Não muda o entrypoint nem eleva privilégios.
+// Alterar depois dos editores PE evita que eles restaurem o subsistema original.
+const guiFile = readFileSync(exe);
+const guiPe = guiFile.readUInt32LE(0x3c);
+if (guiFile.toString("latin1", guiPe, guiPe + 4) !== "PE\0\0")
+  throw Error("Formato PE inválido após empacotar.");
+guiFile.writeUInt16LE(2, guiPe + 24 + 68); // IMAGE_SUBSYSTEM_WINDOWS_GUI
+guiFile.writeUInt32LE(0, guiPe + 24 + 64); // CheckSum após a alteração
+writeFileSync(exe, guiFile);
 console.log(`${relative(root, exe)}: ${mb(statSync(exe).size)}`);
 
 step("Conferindo o executável");
 // Responder a --versao prova que o pacote sobreviveu às alterações no binário.
 const version = run("Executável", exe, ["--versao"]).trim();
-if (!version.includes(pkg.version)) throw Error(`O executável respondeu "${version}", esperava a versão ${pkg.version}.`);
+if (!version.includes(pkg.version))
+  throw Error(
+    `O executável respondeu "${version}", esperava a versão ${pkg.version}.`,
+  );
 console.log(version);
-const info = run("Propriedades", "powershell", [
-  "-NoProfile",
-  "-NonInteractive",
-  "-Command",
-  `$i = (Get-Item -LiteralPath '${exe}').VersionInfo; "$($i.ProductName) | $($i.FileDescription) | $($i.ProductVersion)"`,
-]).trim();
-if (!info.startsWith(APP_NAME)) throw Error(`As propriedades do executável não foram aplicadas: ${info}`);
+const info = run(
+  "Propriedades",
+  "powershell",
+  [
+    "-NoProfile",
+    "-NonInteractive",
+    "-Command",
+    `$i = (Get-Item -LiteralPath $env:AOF_EXE).VersionInfo; "$($i.ProductName) | $($i.FileDescription) | $($i.ProductVersion)"`,
+  ],
+  { AOF_EXE: exe },
+).trim();
+if (!info.startsWith(APP_NAME))
+  throw Error(`As propriedades do executável não foram aplicadas: ${info}`);
 console.log(`propriedades: ${info}`);
 
 step("Escrevendo os arquivos de distribuição");
-// Sem acentos: arquivos .cmd rodam na página de código do console, onde acento
-// de UTF-8 sai trocado.
+// Opcional: instala os atalhos com duplo clique, sem abrir CMD nem pedir admin.
+// ASCII mantém o VBScript legível também no Windows Script Host clássico.
 writeFileSync(
-  join(stage, "Instalar.cmd"),
+  join(stage, "Instalar.vbs"),
   [
-    "@echo off",
-    "setlocal",
-    "cd /d \"%~dp0\"",
-    "echo Instalando o AOF Studio para o seu usuario do Windows.",
-    "echo Nao e necessario ser administrador do computador.",
-    "echo.",
-    `"%~dp0${APP_NAME}.exe" --instalar`,
-    "if errorlevel 1 goto erro",
-    "echo.",
-    "echo Pronto. Abra o AOF Studio pelo menu Iniciar ou pelo atalho da area de trabalho.",
-    "pause",
-    "exit /b 0",
-    ":erro",
-    "echo.",
-    "echo A instalacao nao foi concluida. Copie a mensagem acima para diagnostico.",
-    "pause",
-    "exit /b 1",
+    "Option Explicit",
+    "Dim shell, files, executable, result",
+    'Set shell = CreateObject("WScript.Shell")',
+    'Set files = CreateObject("Scripting.FileSystemObject")',
+    `executable = files.BuildPath(files.GetParentFolderName(WScript.ScriptFullName), "${APP_NAME}.exe")`,
+    'shell.Environment("Process")("AOF_DESKTOP_DIALOG") = "0"',
+    "On Error Resume Next",
+    'result = shell.Run(Chr(34) & executable & Chr(34) & " --instalar", 0, True)',
+    "If Err.Number <> 0 Then",
+    `  MsgBox "Nao foi possivel iniciar a instalacao: " & Err.Description, vbCritical, "${APP_NAME}"`,
+    "  WScript.Quit 1",
+    "End If",
+    "On Error GoTo 0",
+    "If result <> 0 Then",
+    `  MsgBox "A instalacao nao foi concluida. Consulte " & shell.ExpandEnvironmentStrings("%LOCALAPPDATA%\\AOF Studio\\logs\\app.log") & " para diagnostico.", vbCritical, "${APP_NAME}"`,
+    "  WScript.Quit result",
+    "End If",
+    `MsgBox "Instalacao concluida. Abra o ${APP_NAME} pelo menu Iniciar ou pelo atalho da area de trabalho.", vbInformation, "${APP_NAME}"`,
     "",
   ].join("\r\n"),
   "ascii",
@@ -209,21 +281,24 @@ const readme = [
   "",
   "Sistema de orçamentos e contratos que roda no seu próprio computador.",
   "",
-  "COMO INSTALAR",
+  "COMO ABRIR",
   "",
-  "  1. Clique duas vezes em Instalar.cmd.",
-  "  2. Abra o AOF Studio pelo menu Iniciar ou pelo atalho da área de trabalho.",
+  `  1. Descompacte o ZIP e clique duas vezes em ${APP_NAME}.exe.`,
+  "  2. O sistema abre em uma janela própria, sem CMD.",
+  "  3. Para criar atalhos, opcionalmente clique duas vezes em Instalar.vbs.",
   "",
   "Não é preciso ser administrador e não é preciso instalar o Node.js: o",
-  "programa é um único arquivo, com tudo dentro. A instalação copia esse",
-  "arquivo para a sua pasta de usuário e cria os atalhos.",
+  "programa é um único arquivo, com tudo dentro. A instalação opcional copia",
+  "esse arquivo para a sua pasta de usuário e cria os atalhos. Se o Windows",
+  "bloquear scripts VBS, abra diretamente o executável.",
+  "A janela própria usa Microsoft Edge ou Google Chrome já presente no PC.",
   "",
   "ONDE FICAM OS DADOS",
   "",
   "  %LOCALAPPDATA%\\AOF Studio\\data",
   "",
   "Clientes, orçamentos e contratos ficam nesse banco, no seu computador.",
-  "Nada é enviado para a internet. Para ver o caminho exato:",
+  "Os dados comerciais permanecem nesse computador. Para ver o caminho exato:",
   "",
   `  "${APP_NAME}.exe" --pasta-dados`,
   "",
@@ -237,9 +312,9 @@ const readme = [
   "",
   "COMO USAR",
   "",
-  "Ao abrir, o sistema sobe no seu computador e o navegador abre em",
-  "http://localhost:3000. A janela preta é o motor do sistema: deixe-a",
-  "aberta durante o uso e feche-a para encerrar.",
+  "Ao abrir, o sistema inicia no computador e mostra uma janela própria.",
+  "Fechar a janela do aplicativo também encerra o servidor local.",
+  "Não é preciso abrir nem manter uma janela de terminal.",
   "",
   "O endereço responde somente neste computador (127.0.0.1): outras",
   "máquinas da rede não alcançam o sistema nem o banco.",
@@ -260,18 +335,26 @@ writeFileSync(join(stage, "LEIA-ME.txt"), `\ufeff${readme}`, "utf8");
 console.log(readdirSync(stage).join(", "));
 
 step("Compactando para entrega");
-const zip = join(dist, `${APP_NAME.replace(/ /g, "-")}-${pkg.version}-windows.zip`);
+const zip = join(
+  dist,
+  `${APP_NAME.replace(/ /g, "-")}-${pkg.version}-windows.zip`,
+);
 // tar do Windows (bsdtar) grava zip e é bem mais rápido que Compress-Archive.
 try {
   run("Compactação", "tar", ["-a", "-c", "-f", zip, "-C", dist, APP_NAME]);
 } catch {
-  run("Compactação", "powershell", [
-    "-NoProfile",
-    "-NonInteractive",
-    "-Command",
-    `Compress-Archive -Path '${stage}' -DestinationPath '${zip}' -Force`,
-  ]);
+  run(
+    "Compactação",
+    "powershell",
+    [
+      "-NoProfile",
+      "-NonInteractive",
+      "-Command",
+      "Compress-Archive -LiteralPath $env:AOF_STAGE -DestinationPath $env:AOF_ZIP -Force",
+    ],
+    { AOF_STAGE: stage, AOF_ZIP: zip },
+  );
 }
 console.log(`${relative(root, zip)}: ${mb(statSync(zip).size)}`);
 
-console.log(`\nPronto. Para instalar neste computador: "${exe}" --instalar`);
+console.log(`\nPronto. Abra ${exe}, ou use Instalar.vbs para criar atalhos.`);

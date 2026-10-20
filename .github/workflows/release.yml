@@ -5,11 +5,14 @@ name: Release do Windows
 # histórico. Anexo de release fica fora do histórico do git.
 #
 # Para publicar, envie uma tag com a mesma versão do package.json:
-#   git tag v1.1.0 && git push origin v1.1.0
+#   git tag v1.2.0 && git push origin v1.2.0
 # Para só compilar e conferir, sem publicar: aba Actions > Run workflow.
 
 on:
+  pull_request:
+    branches: ["main"]
   push:
+    branches: ["main", "feat/**", "fix/**"]
     tags:
       - "v*"
   workflow_dispatch:

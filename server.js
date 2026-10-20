@@ -4,8 +4,22 @@ import { scryptSync, randomBytes, timingSafeEqual } from "node:crypto";
 import { spawn } from "node:child_process";
 import { join } from "node:path";
 import PDFDocument from "pdfkit";
-import { APP_NAME, APP_VERSION, dataDir, ensureDir, packaged, readAsset } from "./app-env.js";
+import {
+  APP_NAME,
+  APP_VERSION,
+  dataDir,
+  ensureDir,
+  packaged,
+  readAsset,
+} from "./app-env.js";
 import { serveAssets } from "./static-assets.js";
+import { LOGO_FIELDS, validateLogos } from "./branding.js";
+import {
+  createDesktopSession,
+  desktopRequested,
+  reportDesktopError,
+  showDesktopNotice,
+} from "./desktop-window.js";
 import { CATEGORY_IDS, equipmentText } from "./public/catalog.js";
 import { QUOTE_TEMPLATES, getQuoteTemplate } from "./public/quote-templates.js";
 import { renderQuotePdf } from "./quote-pdf.js";
@@ -16,6 +30,36 @@ app.use(express.json({ limit: "1mb" }));
 // Banco local, no perfil do usuário quando instalado. Nada sai do computador.
 const DATA_DIR = ensureDir(dataDir());
 const db = new DatabaseSync(join(DATA_DIR, "app.sqlite"));
+let runningServer = null;
+let stopping = false;
+const desktop = desktopRequested()
+  ? createDesktopSession({ onClose: shutdownDesktop })
+  : null;
+async function shutdownDesktop(reason) {
+  if (stopping) return;
+  stopping = true;
+  const exitCode = reason === "startup-timeout" ? 1 : 0;
+  await desktop?.stop();
+  let finished = false;
+  const finish = () => {
+    if (finished) return;
+    finished = true;
+    try {
+      db.exec("PRAGMA wal_checkpoint(TRUNCATE)");
+      db.close();
+    } catch (error) {
+      console.error(error.message);
+    }
+    process.exit(exitCode);
+  };
+  if (!runningServer) return finish();
+  runningServer.close(finish);
+  runningServer.closeIdleConnections?.();
+  setTimeout(() => {
+    runningServer.closeAllConnections?.();
+    finish();
+  }, 4000).unref();
+}
 db.exec(
   `PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY, name TEXT, email TEXT UNIQUE, salt TEXT, hash TEXT); CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY,user_id INTEGER,expires INTEGER); CREATE TABLE IF NOT EXISTS records(id INTEGER PRIMARY KEY,user_id INTEGER,kind TEXT,body TEXT);`,
 );
@@ -29,6 +73,8 @@ const defaultSettings = {
   address: "Blumenau · SC",
   pix: "28.491.743/0001-20",
   quoteValidityDays: 15,
+  quoteLogoDataUrl: null,
+  contractLogoDataUrl: null,
   clauses: initialClauses,
 };
 const historyEvent = (type, extra = {}) => ({
@@ -131,7 +177,9 @@ app.post("/api/register", (req, res) => {
     price: 0,
   }));
   // Cerimônia e cênicas ficam no catálogo para serem acrescentadas quando houver.
-  const items = catalogue.filter((item) => !["ceremony", "scenic"].includes(item.category));
+  const items = catalogue.filter(
+    (item) => !["ceremony", "scenic"].includes(item.category),
+  );
   put(uid, "packages", {
     name: "Pacote 2 · Som & Luz",
     price: 2700,
@@ -188,13 +236,32 @@ app.post("/api/login", (req, res) => {
 });
 // Usado pelo próprio programa para descobrir se já há uma janela aberta nesta
 // porta antes de subir outra. Responde só em 127.0.0.1, como o resto do servidor.
-app.get("/api/health", (req, res) => res.json({ app: "aof-studio", version: APP_VERSION }));
+app.get("/api/health", (req, res) =>
+  res.json({ app: "aof-studio", version: APP_VERSION }),
+);
 function sameOrigin(req) {
   try {
     return new URL(req.headers.origin).host === req.get("host");
   } catch {
     return false;
   }
+}
+// Desktop window lifecycle is independent of login; an ephemeral, per-process
+// token is required, so an ordinary page cannot stop an unrelated local server.
+for (const [path, action] of [
+  ["heartbeat", "heartbeat"],
+  ["close", "closing"],
+]) {
+  app.post(`/api/desktop/${path}`, (req, res) => {
+    if (!desktop) return res.sendStatus(404);
+    if (
+      !desktop.validToken(req.body?.token) ||
+      (req.headers.origin && !sameOrigin(req))
+    )
+      return res.sendStatus(403);
+    if (!desktop[action](req.body?.windowId)) return res.sendStatus(400);
+    res.status(204).end();
+  });
 }
 app.use("/api", auth, (req, res, next) => {
   if (
@@ -236,6 +303,10 @@ app.get("/api/data", (req, res) => {
 });
 function validate(kind, b) {
   if (!b || typeof b !== "object") return "Dados inválidos.";
+  if (kind === "settings") {
+    const logoError = validateLogos(b);
+    if (logoError) return logoError;
+  }
   if (["clients", "packages", "products"].includes(kind) && !b.name?.trim())
     return "Nome obrigatório.";
   if (
@@ -259,7 +330,8 @@ function validate(kind, b) {
     if (!Array.isArray(b.items)) return "Itens inválidos.";
     if (b.items.length > 200) return "Limite de 200 itens.";
     for (const item of b.items) {
-      if (!String(item?.name || "").trim()) return "Todo item precisa de um nome.";
+      if (!String(item?.name || "").trim())
+        return "Todo item precisa de um nome.";
       if (!CATEGORY_IDS.includes(item.category))
         return "Todo item precisa de um quadro válido do contrato.";
       if (
@@ -343,12 +415,18 @@ function validate(kind, b) {
 }
 app.post("/api/records/:kind", (req, res) => {
   const kind = req.params.kind;
-  if (!["clients", "products", "packages", "documents", "settings"].includes(kind))
+  if (
+    !["clients", "products", "packages", "documents", "settings"].includes(kind)
+  )
     return res.sendStatus(404);
   const b = req.body;
   const error = validate(kind, b);
   if (error) return res.status(400).json({ error });
-  if (kind === "settings" && b.quoteValidityDays != null && b.quoteValidityDays !== "")
+  if (
+    kind === "settings" &&
+    b.quoteValidityDays != null &&
+    b.quoteValidityDays !== ""
+  )
     b.quoteValidityDays = Number(b.quoteValidityDays);
   const existing =
     b.id &&
@@ -359,6 +437,13 @@ app.post("/api/records/:kind", (req, res) => {
       kind,
     );
   if (b.id && !existing) return res.sendStatus(404);
+  if (kind === "settings") {
+    const previous = existing ? JSON.parse(existing.body) : {};
+    for (const field of LOGO_FIELDS) {
+      if (b[field] === undefined) b[field] = previous[field] ?? null;
+      else if (b[field] === "") b[field] = null;
+    }
+  }
   if (kind === "documents" && b.type === "quote") {
     const old = existing ? JSON.parse(existing.body) : null;
     b.quoteTemplate = b.templateId
@@ -367,13 +452,29 @@ app.post("/api/records/:kind", (req, res) => {
         : structuredClone(getQuoteTemplate(b.templateId))
       : null;
   }
-  if (kind === "documents" && existing && JSON.parse(existing.body).type !== b.type)
-    return res.status(400).json({ error: "O tipo do documento não pode ser alterado." });
+  if (
+    kind === "documents" &&
+    existing &&
+    JSON.parse(existing.body).type !== b.type
+  )
+    return res
+      .status(400)
+      .json({ error: "O tipo do documento não pode ser alterado." });
   if (kind === "documents" && !existing) {
     // Campos controlados pelo servidor não vêm do navegador em documentos novos.
     const copiedFrom =
-      typeof b.copiedFrom === "string" && b.copiedFrom.length <= 40 ? b.copiedFrom : null;
-    for (const field of ["history", "sentAt", "archived", "archivedAt", "updatedAt", "sourceId", "copiedFrom"])
+      typeof b.copiedFrom === "string" && b.copiedFrom.length <= 40
+        ? b.copiedFrom
+        : null;
+    for (const field of [
+      "history",
+      "sentAt",
+      "archived",
+      "archivedAt",
+      "updatedAt",
+      "sourceId",
+      "copiedFrom",
+    ])
       delete b[field];
     b.history = [historyEvent("created", copiedFrom ? { copiedFrom } : {})];
     b.updatedAt = new Date().toISOString();
@@ -455,9 +556,13 @@ app.post("/api/documents/:id/convert", (req, res) => {
     updatedAt: now,
     history: [historyEvent("created", { fromQuote: old.number })],
   };
-  for (const field of ["id", "sentAt", "archived", "archivedAt"]) delete b[field];
+  for (const field of ["id", "sentAt", "archived", "archivedAt"])
+    delete b[field];
   const id = put(req.uid, "documents", b);
-  old.history = withEvent(old, historyEvent("converted", { contractId: id, number: b.number }));
+  old.history = withEvent(
+    old,
+    historyEvent("converted", { contractId: id, number: b.number }),
+  );
   stmt(
     "UPDATE records SET body=? WHERE id=? AND user_id=?",
     JSON.stringify(old),
@@ -524,7 +629,9 @@ app.post("/api/documents/:id/sent", (req, res) => {
   if (doc.archived || doc.status === "cancelled")
     return res
       .status(409)
-      .json({ error: "Documentos arquivados ou cancelados não podem ser enviados." });
+      .json({
+        error: "Documentos arquivados ou cancelados não podem ser enviados.",
+      });
   const channel = ["whatsapp", "share"].includes(req.body?.channel)
     ? req.body.channel
     : "other";
@@ -620,7 +727,10 @@ function openBrowser(port) {
 function listen(port) {
   return new Promise((resolve, reject) => {
     const server = app.listen(port, HOST);
-    server.once("listening", () => resolve(server));
+    server.once("listening", () => {
+      runningServer = server;
+      resolve(server);
+    });
     server.once("error", reject);
   });
 }
@@ -635,10 +745,13 @@ async function ourselves(port) {
     return false;
   }
 }
-function announce(port) {
+async function announce(port) {
   console.log(`${APP_NAME} ${APP_VERSION} · http://localhost:${port}`);
   console.log(`Dados em ${DATA_DIR}`);
-  if (packaged) console.log("Feche esta janela para encerrar o sistema.");
+  if (desktop) {
+    await desktop.open(`http://localhost:${port}`);
+    return;
+  }
   // Instalado, abre o navegador sozinho; pelo código-fonte, só se pedirem.
   const wanted = packaged
     ? process.env.AOF_OPEN_BROWSER !== "0"
@@ -661,14 +774,27 @@ async function start() {
       // Já aberto: traz a janela existente para a frente em vez de duplicar.
       if (await ourselves(port)) {
         console.log(`${APP_NAME} já está aberto em http://localhost:${port}`);
-        openBrowser(port);
+        if (desktop) {
+          await desktop.stop();
+          showDesktopNotice(
+            "O AOF Studio já está aberto. Use a janela do aplicativo.",
+          );
+        } else openBrowser(port);
         return process.exit(0);
       }
     }
   }
   throw Error(`Nenhuma porta livre entre ${FIRST_PORT} e ${LAST_PORT}.`);
 }
-start().catch((error) => {
-  console.error(`Não foi possível iniciar o ${APP_NAME}: ${error.message}`);
+start().catch(async (error) => {
+  if (desktop) {
+    await desktop.stop();
+    reportDesktopError(error);
+  } else
+    console.error(`Não foi possível iniciar o ${APP_NAME}: ${error.message}`);
+  runningServer?.close();
+  try {
+    db.close();
+  } catch {}
   process.exit(1);
 });

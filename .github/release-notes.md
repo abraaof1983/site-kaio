@@ -1,27 +1,37 @@
-## Instalar no Windows
+## Abrir no Windows
 
 1. Baixe o `AOF-Studio-__VERSAO__-windows.zip` e descompacte a pasta.
-2. Clique duas vezes em `Instalar.cmd`.
-3. Abra o **AOF Studio** pelo menu Iniciar ou pelo atalho da área de trabalho.
+2. Abra **AOF Studio.exe** diretamente. Não é necessário instalar o Node.js nem ter acesso de administrador.
+3. Para criar atalhos no menu Iniciar e na área de trabalho, use **Instalar.vbs**.
 
-Não precisa ser administrador e não precisa instalar o Node.js: o programa é um único arquivo, com o runtime, as telas e as fontes dentro dele.
+O aplicativo abre uma janela própria do Edge ou Chrome, **sem CMD visível**. O servidor roda apenas enquanto a janela está aberta e é encerrado quando ela é fechada, com uma breve tolerância para recarregamento. O navegador pessoal do usuário não é encerrado. É necessário ter Edge ou Chrome disponível no computador.
 
-Quem preferir o arquivo solto pode baixar o `AOF Studio.exe` e rodar `"AOF Studio.exe" --instalar`.
+## Identidade visual
 
-## Dados
+- Ícone AOF atualizado com o arquivo original fornecido.
+- **Configurações → Logos dos PDFs** permite escolher logos separados para orçamento e contrato.
+- Aceita PNG, JPG e ICO, com prévia, transparência e restauração do padrão.
+- Cada conta guarda seus próprios logos; os documentos já emitidos preservam a identidade salva.
 
-Ficam em `%LOCALAPPDATA%\AOF Studio\data`, no seu computador. O sistema responde somente em `127.0.0.1`: nada na rede alcança o sistema nem o banco, e por isso o celular também não acessa.
+## Correções
 
-Para trazer os dados de uma instalação anterior:
+- Ações de editar, gerar PDF, converter e organizar documentos voltam a executar corretamente.
+- Produtos mantêm os dados registrados no documento; modelos não herdam equipamentos de pacotes não selecionados.
+- Duplicação não transfere autorização de imagem para outro cliente.
+- Nomes completos de equipamentos e condições financeiras extensas são preservados no contrato.
+- Importação valida o banco antes de substituir dados e guarda backup consistente.
+- O servidor entrega somente arquivos públicos autorizados.
 
-```
+## Dados e atualização
+
+O banco instalado continua em `%LOCALAPPDATA%\AOF Studio\data`. Feche o aplicativo antes de atualizar e preserve essa pasta. O sistema não publica o banco no GitHub nem sincroniza os dados com outro computador.
+
+Para trazer dados de uma execução anterior pelo código-fonte, com o sistema fechado:
+
+```sh
 "AOF Studio.exe" --importar "C:\caminho\da\pasta\data"
 ```
 
-Atualizar por cima não apaga os dados. Para fazer backup, feche o sistema e copie a pasta inteira. `"AOF Studio.exe" --pasta-dados` mostra o caminho exato.
+A importação guarda uma cópia de segurança do banco atual e recusa uma origem incompatível. Para fazer backup manual, feche o sistema e copie a pasta de dados inteira.
 
-## Observações
-
-O executável não tem assinatura digital. Baixado pelo navegador, o Windows pode pedir confirmação na primeira execução.
-
-A tipografia da interface vem do Google Fonts: sem Internet, ela cai para as fontes locais de reserva, sem afetar os PDFs.
+A interface usa fontes locais de reserva sem Internet; os PDFs têm fontes e imagens incorporadas.

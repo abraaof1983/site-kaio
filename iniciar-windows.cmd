@@ -32,10 +32,9 @@ if errorlevel 1 goto falha
 
 :dependencias_ok
 echo.
-if not defined PORT set "PORT=3000"
 rem O servidor abre o navegador sozinho quando estiver pronto para responder.
 set "AOF_OPEN_BROWSER=1"
-echo O navegador abre em http://localhost:%PORT% quando o sistema estiver pronto.
+echo O sistema abre quando estiver pronto. A porta livre e informada abaixo.
 echo Mantenha esta janela aberta enquanto usa o sistema.
 echo.
 call "%AOF_NODE_DIR%\npm.cmd" start
@@ -67,5 +66,6 @@ goto falha
 :falha
 echo.
 echo O sistema nao iniciou ou foi encerrado com erro. Copie a mensagem acima para diagnostico.
+if /i "%AOF_DESKTOP%"=="1" exit /b 1
 pause
 exit /b 1

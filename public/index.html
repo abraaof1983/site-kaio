@@ -4,7 +4,7 @@
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width,initial-scale=1" />
     <title>AOF Studio · Gestão de eventos</title>
-    <link rel="icon" type="image/jpeg" href="./quote-assets/logo.jpg" />
+    <link rel="icon" type="image/x-icon" href="./aof-studio.ico" />
     <link rel="stylesheet" href="./style.css" />
     <style>
       .startup {
@@ -47,33 +47,41 @@
       <main class="startup">
         <h1 id="startup-title">Inicie o AOF Studio</h1>
         <p id="startup-message">
-          Este sistema precisa do servidor Node.js para salvar cadastros e gerar
-          PDFs. Abrir o arquivo index.html diretamente não inicia o sistema.
+          Para abrir no Windows, use o AOF Studio.exe ou o iniciador
+          iniciar-windows.vbs. Abrir o arquivo index.html diretamente não inicia
+          o sistema.
         </p>
         <p>
-          Instale o
-          <a
-            href="https://nodejs.org/"
-            target="_blank"
-            rel="noopener noreferrer"
-            >Node.js 24 LTS (instalado ou portátil)</a
-          >. Depois, abra um terminal na pasta do projeto, onde está o arquivo
-          <strong>package.json</strong>, e execute:
+          O aplicativo abre em uma janela própria, sem CMD. Ao fechar essa
+          janela, o sistema é encerrado.
         </p>
-        <pre>
+        <details>
+          <summary>Executar pelo código-fonte</summary>
+          <p>
+            Use o
+            <a
+              href="https://nodejs.org/"
+              target="_blank"
+              rel="noopener noreferrer"
+              >Node.js 24 LTS (instalado ou portátil)</a
+            >. Depois, abra um terminal na pasta do projeto, onde está o arquivo
+            <strong>package.json</strong>, e execute:
+          </p>
+          <pre>
 npm ci
 npm start</pre>
-        <p>
-          Mantenha o terminal aberto e acesse
-          <a href="http://localhost:3000">http://localhost:3000</a> no
-          navegador.
-        </p>
-        <p>
-          No Windows sem administrador, consulte a seção
-          <strong>Sem administrador no Windows</strong> do README. Use o ZIP
-          portátil do Node.js e o arquivo
-          <strong>iniciar-windows.cmd</strong> na pasta do projeto.
-        </p>
+          <p>
+            Mantenha o terminal aberto e acesse
+            <a href="http://localhost:3000">http://localhost:3000</a> no
+            navegador.
+          </p>
+          <p>
+            No Windows sem administrador, consulte a seção
+            <strong>Sem administrador no Windows</strong> do README. Use o ZIP
+            portátil do Node.js e o arquivo
+            <strong>iniciar-windows.vbs</strong> na pasta do projeto.
+          </p>
+        </details>
         <p>
           Se você publicou em uma hospedagem, ela precisa executar o servidor
           Node.js e manter o banco de dados. GitHub Pages e outros serviços
@@ -104,7 +112,11 @@ npm start</pre>
     </div>
     <dialog id="modal"></dialog>
     <dialog id="subdialog" class="dialog-medium"></dialog>
-    <dialog id="picker" class="dialog-wide" aria-labelledby="picker-title"></dialog>
+    <dialog
+      id="picker"
+      class="dialog-wide"
+      aria-labelledby="picker-title"
+    ></dialog>
     <dialog
       id="confirm"
       class="dialog-small"
@@ -126,6 +138,7 @@ npm start</pre>
           "Se esta tela permanecer, confirme que o servidor está em execução seguindo os passos abaixo.";
       }
     </script>
+    <script src="./desktop-session.js" defer></script>
     <script src="./app.js" type="module"></script>
   </body>
 </html>
