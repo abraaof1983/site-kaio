@@ -1,17 +1,20 @@
 import express from "express";
 import { DatabaseSync } from "node:sqlite";
 import { scryptSync, randomBytes, timingSafeEqual } from "node:crypto";
-import { mkdirSync } from "node:fs";
 import { spawn } from "node:child_process";
+import { join } from "node:path";
 import PDFDocument from "pdfkit";
+import { APP_NAME, APP_VERSION, dataDir, ensureDir, packaged, readAsset } from "./app-env.js";
+import { serveAssets } from "./static-assets.js";
 import { QUOTE_TEMPLATES, getQuoteTemplate } from "./public/quote-templates.js";
 import { renderQuotePdf } from "./quote-pdf.js";
 import { renderContractPdf } from "./contract-pdf.js";
 const app = express();
 app.disable("x-powered-by");
 app.use(express.json({ limit: "1mb" }));
-mkdirSync(process.env.DATA_DIR || "data", { recursive: true });
-const db = new DatabaseSync(`${process.env.DATA_DIR || "data"}/app.sqlite`);
+// Banco local, no perfil do usuário quando instalado. Nada sai do computador.
+const DATA_DIR = ensureDir(dataDir());
+const db = new DatabaseSync(join(DATA_DIR, "app.sqlite"));
 db.exec(
   `PRAGMA journal_mode=WAL; CREATE TABLE IF NOT EXISTS users(id INTEGER PRIMARY KEY, name TEXT, email TEXT UNIQUE, salt TEXT, hash TEXT); CREATE TABLE IF NOT EXISTS sessions(token TEXT PRIMARY KEY,user_id INTEGER,expires INTEGER); CREATE TABLE IF NOT EXISTS records(id INTEGER PRIMARY KEY,user_id INTEGER,kind TEXT,body TEXT);`,
 );
@@ -156,6 +159,9 @@ app.post("/api/login", (req, res) => {
   attempts.delete(key);
   login(u.id, res);
 });
+// Usado pelo próprio programa para descobrir se já há uma janela aberta nesta
+// porta antes de subir outra. Responde só em 127.0.0.1, como o resto do servidor.
+app.get("/api/health", (req, res) => res.json({ app: "aof-studio", version: APP_VERSION }));
 function sameOrigin(req) {
   try {
     return new URL(req.headers.origin).host === req.get("host");
@@ -487,6 +493,11 @@ app.delete("/api/records/:kind/:id", (req, res) => {
   if (!result.changes) return res.sendStatus(404);
   res.json({ ok: true });
 });
+// Fontes lidas uma vez. Dentro do executável vêm embutidas, não do disco.
+const FONTS = {
+  body: readAsset("assets/fonts/DejaVuSans.ttf"),
+  heading: readAsset("assets/fonts/DejaVuSans-Bold.ttf"),
+};
 app.get("/api/documents/:id/pdf", (req, res) => {
   const r = get(
     "SELECT body FROM records WHERE id=? AND user_id=? AND kind='documents'",
@@ -505,13 +516,16 @@ app.get("/api/documents/:id/pdf", (req, res) => {
     size: "A4",
     margins: { top: 48, left: 48, right: 48, bottom: 70 },
     bufferPages: true,
+    // A fonte vai já no construtor: sem isso o PDFKit carrega as métricas da
+    // Helvetica de um arquivo em disco, que não existe dentro do executável.
+    font: FONTS.body,
     info: {
       Title: `${b.type === "contract" ? "Contrato" : "Orçamento"} ${b.number}`,
       Author: c.company,
     },
   });
-  doc.registerFont("Body", "assets/fonts/DejaVuSans.ttf");
-  doc.registerFont("Heading", "assets/fonts/DejaVuSans-Bold.ttf");
+  doc.registerFont("Body", FONTS.body);
+  doc.registerFont("Heading", FONTS.heading);
   doc.pipe(res);
   if (b.type === "quote") {
     renderQuotePdf(
@@ -526,22 +540,80 @@ app.get("/api/documents/:id/pdf", (req, res) => {
   renderContractPdf(doc, b, c);
   doc.end();
 });
-app.use(express.static("public"));
+app.use(serveAssets("public"));
 app.use((err, req, res, next) => {
   console.error(err.message);
   if (!res.headersSent)
     res.status(500).json({ error: "Não foi possível concluir a operação." });
 });
-const port = Number(process.env.PORT || 3000);
-app.listen(port, "0.0.0.0", () => {
-  console.log("AOF Gestão iniciada na porta " + port);
-  // O iniciador do Windows pede para abrir o navegador só quando o servidor já responde.
-  if (process.env.AOF_OPEN_BROWSER === "1" && process.platform === "win32")
-    spawn("cmd", ["/c", "start", "", `http://localhost:${port}`], {
-      detached: true,
-      stdio: "ignore",
-      windowsHide: true,
-    })
-      .on("error", () => {})
-      .unref();
+// Sistema local: escuta somente em 127.0.0.1, então nada na rede alcança o
+// servidor nem o banco. Para publicar em servidor, use HOST e COOKIE_SECURE.
+const HOST = process.env.HOST || "127.0.0.1";
+const FIRST_PORT = 3000;
+const LAST_PORT = 3019;
+
+function openBrowser(port) {
+  if (process.platform !== "win32") return;
+  spawn("cmd", ["/c", "start", "", `http://localhost:${port}`], {
+    detached: true,
+    stdio: "ignore",
+    windowsHide: true,
+  })
+    .on("error", () => {})
+    .unref();
+}
+function listen(port) {
+  return new Promise((resolve, reject) => {
+    const server = app.listen(port, HOST);
+    server.once("listening", () => resolve(server));
+    server.once("error", reject);
+  });
+}
+// A porta está ocupada por outra janela deste mesmo sistema?
+async function ourselves(port) {
+  try {
+    const r = await fetch(`http://${HOST}:${port}/api/health`, {
+      signal: AbortSignal.timeout(2000),
+    });
+    return (await r.json())?.app === "aof-studio";
+  } catch {
+    return false;
+  }
+}
+function announce(port) {
+  console.log(`${APP_NAME} ${APP_VERSION} · http://localhost:${port}`);
+  console.log(`Dados em ${DATA_DIR}`);
+  if (packaged) console.log("Feche esta janela para encerrar o sistema.");
+  // Instalado, abre o navegador sozinho; pelo código-fonte, só se pedirem.
+  const wanted = packaged
+    ? process.env.AOF_OPEN_BROWSER !== "0"
+    : process.env.AOF_OPEN_BROWSER === "1";
+  if (wanted) openBrowser(port);
+}
+async function start() {
+  // Porta informada é respeitada como está: testes e execução em servidor
+  // dependem de um endereço previsível, e falhar é melhor que mudar de porta.
+  if (process.env.PORT) {
+    await listen(Number(process.env.PORT));
+    return announce(Number(process.env.PORT));
+  }
+  for (let port = FIRST_PORT; port <= LAST_PORT; port++) {
+    try {
+      await listen(port);
+      return announce(port);
+    } catch (error) {
+      if (error.code !== "EADDRINUSE") throw error;
+      // Já aberto: traz a janela existente para a frente em vez de duplicar.
+      if (await ourselves(port)) {
+        console.log(`${APP_NAME} já está aberto em http://localhost:${port}`);
+        openBrowser(port);
+        return process.exit(0);
+      }
+    }
+  }
+  throw Error(`Nenhuma porta livre entre ${FIRST_PORT} e ${LAST_PORT}.`);
+}
+start().catch((error) => {
+  console.error(`Não foi possível iniciar o ${APP_NAME}: ${error.message}`);
+  process.exit(1);
 });

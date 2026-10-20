@@ -1,10 +1,6 @@
-import { existsSync } from "node:fs";
-import { fileURLToPath } from "node:url";
+import { tryAsset } from "./app-env.js";
 import { dateBeforeEvent, getQuoteTemplate } from "./public/quote-templates.js";
 
-const assets = fileURLToPath(
-  new URL("./public/quote-assets/", import.meta.url),
-);
 const colors = {
   background: "#101719",
   panel: "#172123",
@@ -145,8 +141,8 @@ export function renderQuotePdf(doc, b, company, template = null) {
       .rect(0, 0, doc.page.width, doc.page.height)
       .fill(colors.background)
       .restore();
-    const logo = `${assets}logo.jpg`;
-    const showLogo = Boolean(model && existsSync(logo));
+    const logo = model ? tryAsset("public/quote-assets/logo.jpg") : null;
+    const showLogo = Boolean(logo);
     const top = 39;
     if (showLogo) {
       doc
@@ -552,8 +548,8 @@ export function renderQuotePdf(doc, b, company, template = null) {
   if (introduction)
     text(introduction, { size: 8.5, color: colors.muted, gap: 9 });
 
-  const hero = `${assets}estrutura.png`;
-  if (model && existsSync(hero)) {
+  const hero = model ? tryAsset("public/quote-assets/estrutura.png") : null;
+  if (hero) {
     const imageHeight = 165;
     const caption = wrap(
       model.imageCaption ||
