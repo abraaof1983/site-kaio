@@ -7,24 +7,46 @@ import {
   maskPhone,
   parseMoney,
   splitAmount,
+  whatsappNumber,
 } from "./formatters.js";
+import { buildHash, listPageFor, parseRoute } from "./routes.js";
+import {
+  SORT_LABELS,
+  STATUS_LABELS,
+  TABS,
+  TAB_LABELS,
+  displayStatus as statusOf,
+  inTab,
+  matchesSearch,
+  normalizeText,
+  sortDocs,
+  tabCounts,
+  validityInfo,
+  whatsappLink,
+  whatsappMessage,
+} from "./documents.js";
 
 const $ = (selector, scope = document) => scope.querySelector(selector),
   $$ = (selector, scope = document) => [...scope.querySelectorAll(selector)],
   root = $("#app"),
   modal = $("#modal"),
+  subdialog = $("#subdialog"),
+  picker = $("#picker"),
+  confirmBox = $("#confirm"),
+  rowMenu = $("#row-menu"),
   reauthDialog = $("#reauth");
 let user,
   state,
-  page = "dashboard",
-  search = "",
-  filter = "all",
+  route = parseRoute(location.hash), // tela atual: página, id e filtros da lista
+  renderedHash = null, // hash da tela desenhada, para voltar se a saída for cancelada
   pendingFocus = null, // seletor (ou "heading") que recebe o foco depois do próximo render
-  activeForm = null, // controle do formulário aberto no modal
   pageGuard = null, // indica alterações não salvas no formulário da página atual
+  menuTrigger = null, // botão "⋯" que abriu o menu de ações da linha
   reauthPending = null,
   toastTimer,
   errorSeq = 0;
+const forms = new Map(); // diálogo → controle do formulário aberto nele
+const scrollMemory = new Map(); // posição da rolagem de cada lista, para o botão Voltar
 
 const DEFAULT_VALIDITY_DAYS = 15;
 const DISCARD_MESSAGE =
@@ -45,6 +67,10 @@ const icons = {
   logout: '<path d="M14 4h5v16h-5M10 8l-4 4 4 4M6 12h11"/>',
   trend: '<path d="m4 17 6-6 4 4 6-7M15 8h5v5"/>',
   arrow: '<path d="M7 17 17 7M7 7h10v10"/>',
+  more: '<path d="M5 12h.01M12 12h.01M19 12h.01"/>',
+  plus: '<path d="M12 5v14M5 12h14"/>',
+  menu: '<path d="M4 7h16M4 12h16M4 17h16"/>',
+  chat: '<path d="M4.5 19.5 6 15.3A7.5 7.5 0 1 1 8.8 18z"/><path d="M9 10.5h6M9 13.5h4"/>',
 };
 const icon = (k) =>
   `<svg viewBox="0 0 24 24" aria-hidden="true" focusable="false">${icons[k]}</svg>`;
@@ -62,8 +88,6 @@ const money = (v) =>
     currency: "BRL",
   });
 const date = (v) => (v ? v.split("-").reverse().join("/") : "A definir");
-const shortDate = (v) =>
-  v ? v.split("-").reverse().slice(0, 2).join("/") : "";
 const statuses = {
   draft: "Rascunho",
   sent: "Enviado",
@@ -71,9 +95,8 @@ const statuses = {
   signed: "Assinado",
   cancelled: "Cancelado",
 };
-// Situações calculadas, nunca escolhidas à mão.
-const derivedStatuses = { expired: "Vencido", converted: "Convertido" };
-const statusLabel = (v) => statuses[v] || derivedStatuses[v] || v;
+// Vencido, Convertido e Arquivado são calculados, nunca escolhidos à mão.
+const statusLabel = (v) => STATUS_LABELS[v] || v;
 const badge = (v) =>
   `<span class="badge ${esc(v)}">${esc(statusLabel(v))}</span>`;
 const today = () => new Date().toLocaleDateString("en-CA");
@@ -91,16 +114,16 @@ const debounce = (fn, wait) => {
   };
 };
 
-async function api(url, body, { retry = true } = {}) {
+async function api(url, body, { retry = true, method } = {}) {
   const r = await fetch("/api" + url, {
-    method: body ? "POST" : "GET",
+    method: method || (body ? "POST" : "GET"),
     headers: body ? { "Content-Type": "application/json" } : {},
     body: body ? JSON.stringify(body) : undefined,
   });
   // Sessão expirada no meio do uso: pede a senha e repete a operação sem perder o formulário.
   if (r.status === 401 && retry && user && !AUTH_ROUTES.includes(url)) {
     await reauthenticate();
-    return api(url, body, { retry: false });
+    return api(url, body, { retry: false, method });
   }
   if (!r.ok) {
     let e;
@@ -115,7 +138,7 @@ async function api(url, body, { retry = true } = {}) {
 }
 
 // ---------- Avisos ----------
-function toast(message, type = "success") {
+function toast(message, type = "success", { action = null } = {}) {
   if (type === "error") {
     $("#alert-wrap").classList.add("show");
     $("#alert-close").hidden = false;
@@ -123,14 +146,35 @@ function toast(message, type = "success") {
     requestAnimationFrame(() => ($("#alert").textContent = message));
     return;
   }
-  const box = $("#toast");
-  box.textContent = message;
+  const box = $("#toast"),
+    text = document.createElement("span");
+  text.textContent = message;
+  box.replaceChildren(text);
+  // Ação opcional, como "Desfazer". O aviso fica mais tempo e pausa com o mouse ou o foco.
+  if (action) {
+    const button = document.createElement("button");
+    button.type = "button";
+    button.className = "toast-action";
+    button.textContent = action.label;
+    button.onclick = () => {
+      hideToast();
+      action.onClick();
+    };
+    box.append(button);
+  }
   box.classList.add("show");
+  box.dataset.duration = action ? "10000" : "5000";
+  startToastTimer();
+}
+function startToastTimer() {
   clearTimeout(toastTimer);
-  toastTimer = setTimeout(() => {
-    box.classList.remove("show");
-    box.textContent = "";
-  }, 5000);
+  toastTimer = setTimeout(hideToast, Number($("#toast").dataset.duration || 5000));
+}
+function hideToast() {
+  clearTimeout(toastTimer);
+  const box = $("#toast");
+  box.classList.remove("show");
+  box.replaceChildren();
 }
 function closeAlert() {
   $("#alert-wrap").classList.remove("show");
@@ -197,6 +241,17 @@ function passwordField(id, name, label, autocomplete, attrs = "", full = false) 
 
 // ---------- Validação acessível (erro no campo + resumo no topo) ----------
 function updateCustomValidity(el) {
+  if (el.matches?.("[data-combo-input]")) {
+    const hidden = el.form?.elements.namedItem(el.dataset.comboInput);
+    el.setCustomValidity(
+      el.required && !hidden?.value
+        ? el.value.trim()
+          ? "Escolha um cliente da lista ou cadastre um novo."
+          : "Selecione o cliente."
+        : "",
+    );
+    return;
+  }
   if (!el.matches?.("[data-money]")) return;
   const value = parseMoney(el.value);
   el.setCustomValidity(
@@ -377,8 +432,11 @@ function clearDrafts() {
 }
 function focusSelector(el) {
   if (!el || !root.contains(el)) return null;
-  for (const attr of ["data-edit-doc", "data-edit-client", "data-edit-package", "data-convert", "data-quote-template", "data-new"])
+  for (const attr of ["data-edit-doc", "data-edit-client", "data-edit-package", "data-convert", "data-send", "data-duplicate", "data-quote-template", "data-new-for", "data-new"])
     if (el.hasAttribute(attr)) return `[${attr}="${CSS.escape(el.getAttribute(attr))}"]`;
+  // Ações escolhidas no menu "⋯" devolvem o foco ao próprio botão "⋯" da linha.
+  if (el.closest("#row-menu") && menuTrigger?.dataset.menu)
+    return `[data-menu="${CSS.escape(menuTrigger.dataset.menu)}"]`;
   return null;
 }
 
@@ -474,7 +532,8 @@ async function logout() {
     await api("/logout", {}, { retry: false });
   } catch {}
   clearDrafts();
-  page = "dashboard";
+  history.replaceState(null, "", "#/");
+  route = parseRoute("#/");
   auth();
 }
 
@@ -482,26 +541,47 @@ async function logout() {
 function docs(type) {
   return state.documents.filter((d) => !type || d.type === type);
 }
+// Documentos fora do arquivo: os únicos que entram no painel, contagens e agenda.
+const activeDocs = (type) => docs(type).filter((d) => !d.archived);
 const findDoc = (id) => state.documents.find((d) => d.id === Number(id));
+const findClient = (id) => state.clients.find((c) => String(c.id) === String(id));
 const contractFor = (quote) =>
   quote && state.documents.find((d) => d.type === "contract" && d.sourceId === quote.id);
-function displayStatus(d) {
-  if (d.type === "quote") {
-    if (contractFor(d)) return "converted";
-    if (["draft", "sent"].includes(d.status) && d.validUntil && d.validUntil < today())
-      return "expired";
-  }
-  return d.status;
-}
+const displayStatus = (d) => statusOf(d, { contract: contractFor(d), today: today() });
+const docHref = (d) => buildHash({ page: listPageFor(d.type), id: d.id });
+const docKind = (d) => (d.type === "quote" ? "Orçamento" : "Contrato");
+const docsOfClient = (c) =>
+  state.documents.filter((d) => String(d.clientId ?? d.client?.id ?? "") === String(c.id));
 function validityNote(d, status) {
-  if (!["draft", "sent", "expired"].includes(status) || !d.validUntil) return "";
-  const days = daysBetween(today(), d.validUntil);
-  if (days == null) return "";
-  if (days < 0) return `<small class="doc-note late">Venceu em ${shortDate(d.validUntil)}</small>`;
-  if (days === 0) return '<small class="doc-note warn">Vence hoje</small>';
-  if (days <= 3)
-    return `<small class="doc-note warn">Vence em ${days} ${days === 1 ? "dia" : "dias"}</small>`;
-  return `<small class="doc-note">Válido até ${shortDate(d.validUntil)}</small>`;
+  const info = validityInfo(d, status, today());
+  return info ? `<small class="doc-note ${info.tone}">${info.text}</small>` : "";
+}
+const dateTime = (iso) =>
+  new Date(iso).toLocaleString("pt-BR", {
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
+// Histórico gravado pelo servidor; documentos antigos só têm a data de criação.
+function historyEvents(d) {
+  const list = Array.isArray(d.history) && d.history.length ? d.history : [{ type: "created", at: d.createdAt }];
+  const label = (e) =>
+    ({
+      created: e.fromQuote
+        ? `Contrato gerado do orçamento ${e.fromQuote}`
+        : e.copiedFrom
+          ? `Criado como cópia de ${e.copiedFrom}`
+          : "Criado",
+      edited: "Editado",
+      status: `Situação alterada: ${statusLabel(e.from)} → ${statusLabel(e.to)}`,
+      sent: `${e.channel === "whatsapp" ? "Enviado pelo WhatsApp" : e.channel === "share" ? "PDF compartilhado" : "Envio registrado"}${e.to ? " · passou a Enviado" : ""}`,
+      converted: `Contrato ${e.number || ""} gerado`.replace("  ", " "),
+      archived: "Arquivado",
+      restored: "Restaurado",
+    })[e.type] || "Atualizado";
+  return list.filter((e) => e.at).map((e) => ({ at: e.at, text: label(e) })).reverse();
 }
 const labels = {
   dashboard: "Visão geral",
@@ -513,64 +593,107 @@ const labels = {
 };
 const newButton = (kind, label, primary = true) =>
   `<button type="button"${primary ? ' class="primary"' : ""} data-new="${kind}"><span aria-hidden="true">＋</span> ${label}</button>`;
+const linkButton = (href, label, cls = "") =>
+  `<a class="btn${cls ? ` ${cls}` : ""}" href="${href}">${label}</a>`;
 
 function render() {
   pageGuard = null;
-  document.title = `${labels[page]} · AOF Studio`;
-  const contractCount = docs("contract").length;
-  root.innerHTML = `<a class="skip-link" href="#conteudo" data-action="skip">Pular para o conteúdo</a><div class="shell"><div class="sidebar"><div class="brand"><span class="mark" aria-hidden="true">a</span><div class="brand-text">aof<span class="brand-soft">studio</span><small>GESTÃO DE EVENTOS</small></div></div><p class="nav-label" id="nav-label">ESPAÇO DE TRABALHO</p><nav class="nav" aria-labelledby="nav-label">${Object.entries(
-    labels,
-  )
-    .map(
-      ([k, l]) =>
-        `<button type="button" data-page="${k}" class="${page === k ? "active" : ""}"${page === k ? ' aria-current="page"' : ""} title="${l}">${icon(k)}<span class="label">${l}</span>${k === "contracts" && contractCount ? `<span class="count">${contractCount}</span>` : ""}</button>`,
-    )
-    .join(
-      "",
-    )}</nav><div class="side-bottom"><div class="userline"><span class="avatar" aria-hidden="true">${initial()}</span><div class="user-meta"><strong>${esc(firstName())}</strong><small>${esc(user.email)}</small></div><button type="button" class="logout" data-action="logout" aria-label="Sair da conta" title="Sair">${icon("logout")}<span>Sair</span></button></div></div></div><div class="main"><header class="topbar"><p class="crumbs">Seu espaço <span aria-hidden="true">/</span> <strong>${labels[page]}</strong></p></header><main class="content" id="conteudo" tabindex="-1">${content()}</main></div></div>`;
-  if (page === "settings") bindSettings();
+  // /#/orcamentos/5 de um contrato vira /#/contratos/5, sem novo item no histórico.
+  const doc = route.id != null && ["quotes", "contracts"].includes(route.page) ? findDoc(route.id) : null;
+  if (doc && listPageFor(doc.type) !== route.page) {
+    route = { ...route, page: listPageFor(doc.type) };
+    history.replaceState(null, "", buildHash(route));
+  }
+  renderedHash = location.hash;
+  const view = content(doc);
+  document.title = `${view.title} · AOF Studio`;
+  root.innerHTML = `<a class="skip-link" href="#conteudo" data-action="skip">Pular para o conteúdo</a><div class="shell">${sidebar()}<div class="main">${topbar(view.crumbs)}<main class="content" id="conteudo" tabindex="-1">${view.html}</main></div></div>${bottomNav()}`;
+  if (route.page === "settings") bindSettings();
   const focus = pendingFocus;
   pendingFocus = null;
   if (focus) ((focus !== "heading" && root.querySelector(focus)) || root.querySelector("h1"))?.focus();
 }
+const NAV = ["dashboard", "quotes", "contracts", "clients", "packages", "settings"];
+// Na lista, aria-current="page"; na tela de um documento, a seção fica marcada como "true".
+const currentAttr = (k) =>
+  route.page !== k ? "" : route.id == null ? ' aria-current="page"' : ' aria-current="true"';
+function sidebar() {
+  const contractCount = activeDocs("contract").length;
+  return `<div class="sidebar"><div class="brand"><span class="mark" aria-hidden="true">a</span><div class="brand-text">aof<span class="brand-soft">studio</span><small>GESTÃO DE EVENTOS</small></div></div><p class="nav-label" id="nav-label">ESPAÇO DE TRABALHO</p><nav class="nav" aria-labelledby="nav-label">${NAV.map(
+    (k) =>
+      `<a href="${buildHash({ page: k })}" class="${route.page === k ? "active" : ""}"${currentAttr(k)}>${icon(k)}<span class="label">${labels[k]}</span>${k === "contracts" && contractCount ? `<span class="count">${contractCount}</span>` : ""}</a>`,
+  ).join(
+    "",
+  )}</nav><div class="side-bottom"><div class="userline"><span class="avatar" aria-hidden="true">${initial()}</span><div class="user-meta"><strong>${esc(firstName())}</strong><small>${esc(user.email)}</small></div><button type="button" class="logout" data-action="logout" aria-label="Sair da conta" title="Sair">${icon("logout")}<span>Sair</span></button></div></div></div>`;
+}
+function topbar(crumbs) {
+  const items = crumbs.map((c, i) =>
+    i < crumbs.length - 1 && c.href
+      ? `<li><a href="${c.href}">${esc(c.label)}</a></li>`
+      : `<li><span aria-current="page">${esc(c.label)}</span></li>`,
+  );
+  return `<header class="topbar"><span class="mark mobile-mark" aria-hidden="true">a</span><nav class="crumbs" aria-label="Você está em"><ol>${items.join("")}</ol></nav></header>`;
+}
+// Celular: barra inferior com rótulos, botão "Novo" e menu "Mais".
+function bottomNav() {
+  const item = (k, label, ic) =>
+    `<a href="${buildHash({ page: k })}" class="tab-item${route.page === k ? " active" : ""}"${currentAttr(k)}>${icon(ic)}<span>${label}</span></a>`;
+  const moreActive = ["clients", "packages", "settings"].includes(route.page);
+  return `<nav class="bottom-nav" aria-label="Navegação principal">${item("dashboard", "Início", "dashboard")}${item("quotes", "Orçamentos", "quotes")}<button type="button" class="tab-item tab-new" popovertarget="new-menu">${icon("plus")}<span>Novo</span></button>${item("contracts", "Contratos", "contracts")}<button type="button" class="tab-item${moreActive ? " active" : ""}" popovertarget="more-menu">${icon("menu")}<span>Mais${moreActive ? `<span class="sr-only">, seção atual: ${labels[route.page]}</span>` : ""}</span></button></nav><div id="new-menu" class="sheet-menu" popover><p class="sheet-title">Criar</p><button type="button" data-new="quote">Novo orçamento</button><button type="button" data-new="contract">Novo contrato</button><button type="button" data-new="client">Novo cliente</button></div><div id="more-menu" class="sheet-menu" popover><a href="#/clientes">Clientes</a><a href="#/pacotes">Pacotes e preços</a><a href="#/configuracoes">Configurações</a><button type="button" data-action="logout">Sair da conta</button></div>`;
+}
 function head(title, description, buttons = "") {
   return `<div class="page-head"><div><h1 tabindex="-1">${title}</h1><p>${description}</p></div><div class="actions">${buttons}</div></div>`;
 }
-function content() {
-  if (page === "dashboard") return dashboard();
-  if (page === "settings") return settings();
+const HOME = { label: "Seu espaço", href: "#/" };
+const sectionCrumb = (page) => ({ label: labels[page], href: buildHash({ page }) });
+function notFound(title, message, page = "dashboard") {
+  return {
+    title,
+    crumbs: page === "dashboard" ? [HOME, { label: title }] : [HOME, sectionCrumb(page), { label: title }],
+    html: `${head(title, message)}${linkButton(buildHash({ page }), page === "dashboard" ? "Ir para a Visão geral" : `Voltar para ${labels[page]}`, "primary")}`,
+  };
+}
+// Cada tela devolve título da aba, trilha de navegação e conteúdo.
+function content(doc) {
+  const { page, id } = route;
+  if (!route.known) return notFound("Página não encontrada", "Este endereço não corresponde a uma tela do sistema.");
+  if (id != null) {
+    if (page === "clients") {
+      const client = findClient(id);
+      return client ? clientDetail(client) : notFound("Cliente não encontrado", "Ele pode ter sido excluído.", "clients");
+    }
+    return doc
+      ? docDetail(doc)
+      : notFound("Documento não encontrado", "Ele pode ter sido excluído definitivamente.", page);
+  }
+  const view = (html) => ({ title: labels[page], crumbs: [HOME, { label: labels[page] }], html });
+  if (page === "dashboard") return view(dashboard());
+  if (page === "settings") return view(settings());
   if (page === "clients")
-    return (
+    return view(
       head("Clientes", "Dados de contato usados nos orçamentos e contratos.", newButton("client", "Novo cliente")) +
-      toolbar() +
-      `<div class="panel" id="list">${clientTable()}</div>`
+        toolbar() +
+        `<div class="panel" id="list">${clientTable()}</div>`,
     );
   if (page === "packages")
-    return (
-      head(
-        "Pacotes e preços",
-        "Serviços, equipamentos e valores de referência para os orçamentos.",
-        newButton("package", "Novo pacote"),
-      ) +
-      `<div class="list-cards">${state.packages.map(packageCard).join("") || empty("Seu primeiro pacote", "Cadastre os serviços, equipamentos e o preço de cada experiência.", "package", "Criar pacote")}</div>`
+    return view(
+      head("Pacotes e preços", "Serviços, equipamentos e valores de referência para os orçamentos.", newButton("package", "Novo pacote")) +
+        `<div class="list-cards">${state.packages.map(packageCard).join("") || empty("Seu primeiro pacote", "Cadastre os serviços, equipamentos e o preço de cada experiência.", "package", "Criar pacote")}</div>`,
     );
   const isQ = page === "quotes",
     kind = isQ ? "quote" : "contract";
-  return (
+  return view(
     head(
       isQ ? "Orçamentos" : "Contratos",
-      isQ
-        ? "Crie propostas, acompanhe a validade e gere contratos."
-        : "Revise cláusulas, condições e assinaturas de cada evento.",
+      isQ ? "Crie propostas, acompanhe a validade e gere contratos." : "Revise cláusulas, condições e assinaturas de cada evento.",
       newButton(kind, isQ ? "Novo orçamento" : "Novo contrato"),
     ) +
-    (isQ ? quoteGallery() : "") +
-    toolbar(kind) +
-    `<div class="panel" id="list">${docTable(docs(kind), kind)}</div>`
+      toolbar(kind) +
+      `<div class="panel" id="list">${docList(kind)}</div>`,
   );
 }
 const packageCard = (p) =>
-  `<article class="panel package-detail"><h2>${esc(p.name)}</h2><p>${esc(p.description)}</p><p class="price">${money(p.price)}</p><p class="equipment">${esc(p.equipment)}</p><button type="button" data-edit-package="${p.id}">Editar pacote<span class="sr-only"> ${esc(p.name)}</span></button></article>`;
+  `<article class="panel package-detail"><h2>${esc(p.name)}</h2><p>${esc(p.description)}</p><p class="price">${money(p.price)}</p><p class="equipment">${esc(p.equipment)}</p><div class="card-actions"><button type="button" data-edit-package="${p.id}">Editar pacote<span class="sr-only"> ${esc(p.name)}</span></button><button type="button" class="danger-outline" data-delete-package="${p.id}">Excluir<span class="sr-only"> pacote ${esc(p.name)}</span></button></div></article>`;
 function quoteGallery() {
   const templates = state.quoteTemplates || QUOTE_TEMPLATES;
   return `<section class="quote-gallery" aria-labelledby="quote-models-title"><div class="quote-gallery-heading"><div><h2 id="quote-models-title">Modelos prontos para impressionar</h2><p>Escolha o espaço, personalize os detalhes e gere um PDF com sua marca.</p></div><span class="quote-gallery-badge">${templates.length} modelos incluídos</span></div><div class="quote-models">${templates
@@ -580,25 +703,33 @@ function quoteGallery() {
     )
     .join("")}</div></section>`;
 }
+const entriesOf = (list) => list.map((doc) => ({ doc, status: displayStatus(doc) }));
+const countsFor = (kind) => tabCounts(entriesOf(docs(kind)), TABS[kind]);
+function tabsMarkup(kind) {
+  const counts = countsFor(kind),
+    tabs = [...TABS[kind], ...(counts.archived || route.filter === "archived" ? ["archived"] : [])];
+  return `<div class="status-tabs" role="group" aria-label="Filtrar por situação">${tabs
+    .map(
+      (t) =>
+        `<button type="button" class="status-tab${route.filter === t ? " active" : ""}" data-filter="${t}" aria-pressed="${route.filter === t}">${TAB_LABELS[t]} <span class="tab-count">${counts[t] ?? 0}</span></button>`,
+    )
+    .join("")}</div>`;
+}
+// Abas por situação (com contagem), busca e ordenação; tudo fica no endereço da tela.
 function toolbar(kind = null) {
-  const options =
-    kind === "quote"
-      ? ["draft", "sent", "approved", "cancelled", "expired", "converted"]
-      : ["draft", "sent", "approved", "signed", "cancelled"];
-  return `<div class="toolbar" role="search"><label class="sr-only" for="search">Buscar</label><input type="search" id="search" placeholder="${kind ? "Buscar cliente, evento ou nº" : "Buscar por nome ou e-mail"}" value="${esc(search)}" autocomplete="off">${
-    kind
-      ? `<label class="sr-only" for="statusfilter">Filtrar por situação</label><select id="statusfilter"><option value="all">Todas as situações</option>${options
-          .map((v) => `<option value="${v}"${filter === v ? " selected" : ""}>${statusLabel(v)}</option>`)
-          .join("")}</select>`
-      : ""
-  }<p class="sr-only" id="results-status" role="status"></p></div>`;
+  const sort = kind
+    ? `<label class="sort"><span>Ordenar por</span><select id="sort">${Object.entries(SORT_LABELS)
+        .map(([v, l]) => `<option value="${v}"${route.sort === v ? " selected" : ""}>${l}</option>`)
+        .join("")}</select></label>`
+    : "";
+  return `${kind ? tabsMarkup(kind) : ""}<div class="toolbar" role="search"><label class="sr-only" for="search">Buscar</label><input type="search" id="search" placeholder="${kind ? "Buscar cliente, evento ou nº" : "Buscar nome, e-mail ou telefone"}" value="${esc(route.search)}" autocomplete="off">${sort}<p class="sr-only" id="results-status" role="status"></p></div>`;
 }
 function empty(title, description, kind, label) {
   return `<div class="empty"><div class="empty-symbol" aria-hidden="true">◇</div><h3>${title}</h3><p>${description}</p>${kind ? newButton(kind, label) : ""}</div>`;
 }
 function dashboard() {
-  const contracts = docs("contract"),
-    quotes = docs("quote"),
+  const contracts = activeDocs("contract"),
+    quotes = activeDocs("quote"),
     active = contracts.filter((d) => ["sent", "approved", "signed"].includes(d.status)),
     closed = contracts.filter((d) => ["approved", "signed"].includes(d.status)),
     open = quotes.filter((d) => ["draft", "sent"].includes(displayStatus(d))),
@@ -628,20 +759,20 @@ function dashboard() {
       "Contratos aprovados ou assinados",
       "trend",
       true,
-    )}</div><div class="grid"><div><section class="panel"><div class="panel-title"><h2>Documentos recentes</h2><button type="button" class="link-button" data-page="contracts">Ver contratos</button></div>${docTable(state.documents.slice(0, 6), null, { compact: true })}</section><section class="panel panel-gap"><div class="panel-title"><h2>Próximos eventos</h2><span>Contratos com data a partir de hoje</span></div>${eventList()}</section></div><aside class="aside-cards" aria-label="Catálogo de pacotes"><section class="panel"><div class="panel-title"><h2>Seu catálogo de experiências</h2></div>${
+    )}</div><div class="grid"><div><section class="panel"><div class="panel-title"><h2>Documentos recentes</h2><div class="panel-links"><a class="link-button" href="#/orcamentos">Orçamentos</a><a class="link-button" href="#/contratos">Contratos</a></div></div>${docEntries(entriesOf(activeDocs().slice(0, 6)), { compact: true, emptyHtml: empty("Sua próxima história começa aqui", "Crie um orçamento, combine os detalhes e transforme em contrato.", "quote", "Criar primeiro orçamento") })}</section><section class="panel panel-gap"><div class="panel-title"><h2>Próximos eventos</h2><span>Contratos com data a partir de hoje</span></div>${eventList()}</section></div><aside class="aside-cards" aria-label="Catálogo de pacotes"><section class="panel"><div class="panel-title"><h2>Seu catálogo de experiências</h2></div>${
       pk
         ? `<div class="package-box"><p class="package-label">EM DESTAQUE</p><h3>${esc(pk.name)}</h3><p class="price">${money(pk.price)}</p><p class="package-desc">${esc(pk.description)}</p><ul>${String(pk.equipment || "")
             .split("\n")
             .filter(Boolean)
             .slice(0, 4)
             .map((x) => `<li>${esc(x)}</li>`)
-            .join("")}</ul><button type="button" data-page="packages">Gerenciar pacotes</button></div>`
+            .join("")}</ul>${linkButton("#/pacotes", "Gerenciar pacotes", "block")}</div>`
         : empty("Monte seu catálogo", "Crie seu primeiro pacote.", "package", "Criar pacote")
     }</section></aside></div>`
   );
 }
 function eventList() {
-  const list = docs("contract")
+  const list = activeDocs("contract")
     .filter((d) => d.date >= today() && d.status !== "cancelled")
     .sort((a, b) => a.date.localeCompare(b.date))
     .slice(0, 3);
@@ -649,67 +780,95 @@ function eventList() {
     ? `<ul class="event-list">${list
         .map(
           (d) =>
-            `<li><span class="badge approved">${date(d.date)}</span><div><strong>${esc(d.event)}</strong><small>${esc(d.venue || "Local a definir")}</small></div></li>`,
+            `<li><span class="badge approved">${date(d.date)}</span><div><a class="row-link" href="${docHref(d)}">${esc(d.event)}</a><small>${esc(d.client?.name)} · ${esc(d.venue || "Local a definir")}</small></div></li>`,
         )
         .join("")}</ul>`
     : empty("A agenda está aberta", "Os próximos eventos dos seus contratos aparecerão aqui.");
 }
-function docTable(list, kind = null, { compact = false } = {}) {
-  const term = search.trim().toLowerCase();
-  const visible = list.filter(
-    (d) =>
-      `${d.client?.name || ""} ${d.event || ""} ${d.number || ""}`.toLowerCase().includes(term) &&
-      (filter === "all" || displayStatus(d) === filter),
-  );
-  if (!visible.length) {
-    if (list.length)
-      return '<div class="empty"><h3>Nenhum documento encontrado</h3><p>Nenhum resultado para a busca ou a situação selecionada.</p><button type="button" data-action="clear-filters">Limpar busca e filtros</button></div>';
+// Lista de uma página (orçamentos ou contratos) com a aba, a busca e a ordem atuais.
+function docList(kind) {
+  const all = entriesOf(docs(kind));
+  if (!all.length)
     return kind === "contract"
       ? empty("Nenhum contrato ainda", "Gere um contrato a partir de um orçamento ou crie um do zero.", "contract", "Novo contrato")
-      : empty("Sua próxima história começa aqui", "Crie um orçamento, combine os detalhes e transforme em contrato.", "quote", "Criar primeiro orçamento");
-  }
-  const row = (d) => {
-    const status = displayStatus(d),
-      isQuote = d.type === "quote",
-      contract = isQuote ? contractFor(d) : null,
-      source = !isQuote && d.sourceId ? findDoc(d.sourceId) : null,
-      context = `<span class="sr-only">: ${esc(d.client?.name)}, ${esc(d.event)}</span>`;
-    // No painel, só as ações mais usadas; as demais ficam nas páginas de cada lista.
-    const more = compact
-      ? ""
-      : `<button type="button" data-pdf="${d.id}">Baixar PDF${context}</button>${
-          isQuote
-            ? contract
-              ? `<button type="button" data-edit-doc="${contract.id}">Ver contrato${context}</button>`
-              : `<button type="button" class="soft" data-convert="${d.id}">Gerar contrato${context}</button>`
-            : ""
-        }`;
-    const preview = compact ? '<span class="sr-only">Visualizar </span>PDF' : "Visualizar PDF";
-    return `<tr><td><strong>${esc(d.client?.name)}</strong><small>${esc(d.event)} · ${isQuote ? "Orçamento" : "Contrato"} <span class="doc-number">${esc(d.number || "")}</span></small>${source ? `<small>Gerado do orçamento <span class="doc-number">${esc(source.number)}</span></small>` : ""}</td><td>${date(d.date)}</td><td>${money(d.total)}</td><td>${badge(status)}${isQuote ? validityNote(d, status) : ""}</td><td><div class="rowactions"><button type="button" data-edit-doc="${d.id}">Editar${context}</button><button type="button" data-preview-pdf="${d.id}">${preview}<span class="sr-only"> (abre em nova aba)</span>${context} <span aria-hidden="true">↗</span></button>${more}</div></td></tr>`;
-  };
-  return `<div class="table-wrap"><table><thead><tr><th scope="col">Cliente / evento</th><th scope="col">Data</th><th scope="col">Valor</th><th scope="col">Situação</th><th scope="col">Ações</th></tr></thead><tbody>${visible.map(row).join("")}</tbody></table></div>`;
+      : `<div class="empty"><div class="empty-symbol" aria-hidden="true">◇</div><h3>Sua próxima história começa aqui</h3><p>Comece por um dos modelos prontos ou crie um orçamento em branco.</p></div>${quoteGallery()}<p class="empty-alt">${newButton("quote", "Começar em branco", false)}</p>`;
+  const visible = all.filter((e) => inTab(e, route.filter) && matchesSearch(e.doc, route.search));
+  const sorted = sortDocs(visible.map((e) => e.doc), route.sort).map((doc) => visible.find((e) => e.doc === doc));
+  const emptyHtml =
+    route.filter === "archived" && !route.search
+      ? '<div class="empty"><h3>Nenhum documento arquivado</h3><p>Documentos arquivados saem das listas e do painel, e podem ser restaurados aqui.</p></div>'
+      : '<div class="empty"><h3>Nenhum documento encontrado</h3><p>Nenhum resultado para a busca ou a situação selecionada.</p><button type="button" data-action="clear-filters">Limpar busca e filtros</button></div>';
+  return docEntries(sorted, { kind, emptyHtml });
 }
+// Mesma lista em tabela (computador) e em cartões (celular); o CSS mostra uma das duas.
+function docEntries(entries, { kind = null, compact = false, emptyHtml = "" } = {}) {
+  if (!entries.length) return emptyHtml;
+  const numberCol = !compact;
+  return `<div class="table-wrap${compact ? " compact" : ""}"><table class="doc-table"><thead><tr><th scope="col">Cliente / evento</th>${numberCol ? '<th scope="col" class="col-num">Nº</th>' : ""}<th scope="col">${compact ? "Data" : "Data do evento"}</th><th scope="col">Valor</th><th scope="col">Situação</th><th scope="col">Ações</th></tr></thead><tbody>${entries
+    .map((e) => docRow(e, { compact, numberCol }))
+    .join("")}</tbody></table></div><ul class="doc-cards" aria-label="${kind ? (kind === "quote" ? "Orçamentos" : "Contratos") : "Documentos"}">${entries.map(docCard).join("")}</ul>`;
+}
+const rowContext = (d) => `<span class="sr-only">: ${esc(d.client?.name)}, ${esc(d.event)}</span>`;
+// Ação principal da linha, conforme o próximo passo provável; as demais ficam no menu "⋯".
+function primaryAction(d, status) {
+  const ctx = rowContext(d),
+    contract = d.type === "quote" ? contractFor(d) : null;
+  if (d.archived) return `<button type="button" data-restore="${d.id}">Restaurar${ctx}</button>`;
+  if (contract) return `<a class="btn" href="${docHref(contract)}">Ver contrato${ctx}</a>`;
+  if (status === "draft") return `<button type="button" class="soft" data-send="${d.id}">Enviar${ctx}</button>`;
+  if (d.type === "quote" && ["sent", "approved"].includes(status))
+    return `<button type="button" class="soft" data-convert="${d.id}">Gerar contrato${ctx}</button>`;
+  if (status === "expired") return `<button type="button" data-edit-doc="${d.id}">Editar${ctx}</button>`;
+  return `<button type="button" data-preview-pdf="${d.id}">PDF<span class="sr-only"> (abre em nova aba)</span>${ctx} <span aria-hidden="true">↗</span></button>`;
+}
+const menuButton = (d) =>
+  `<button type="button" class="icon-button dots" data-menu="${d.id}" popovertarget="row-menu" aria-label="Mais ações: ${esc(d.client?.name)}, ${esc(d.event)}">${icon("more")}</button>`;
+function docRow({ doc: d, status }, { compact, numberCol }) {
+  // Na versão compacta (painel e tela do cliente) a origem fica só na tela do documento.
+  const source = !compact && d.type === "contract" && d.sourceId ? findDoc(d.sourceId) : null;
+  return `<tr data-href="${docHref(d)}"><td><a class="row-link" href="${docHref(d)}">${esc(d.client?.name)}</a><small>${esc(d.event)}${compact ? ` · ${docKind(d)}` : ""} <span class="doc-number${numberCol ? " sub-num" : ""}">${esc(d.number || "")}</span></small>${source ? `<small>Gerado do orçamento <span class="doc-number">${esc(source.number)}</span></small>` : ""}</td>${numberCol ? `<td class="col-num"><span class="doc-number">${esc(d.number || "")}</span></td>` : ""}<td>${date(d.date)}</td><td>${money(d.total)}</td><td>${badge(d.archived ? "archived" : status)}${d.archived ? "" : validityNote(d, status)}</td><td><div class="rowactions">${primaryAction(d, status)}${menuButton(d)}</div></td></tr>`;
+}
+function docCard({ doc: d, status }) {
+  return `<li class="doc-card" data-href="${docHref(d)}"><div class="doc-card-head"><a class="row-link" href="${docHref(d)}">${esc(d.client?.name)}</a>${badge(d.archived ? "archived" : status)}</div><p class="doc-card-sub">${esc(d.event)} · ${docKind(d)} <span class="doc-number">${esc(d.number || "")}</span></p><p class="doc-card-meta"><span>${date(d.date)}</span><strong>${money(d.total)}</strong></p>${d.archived ? "" : validityNote(d, status)}<div class="rowactions">${primaryAction(d, status)}${menuButton(d)}</div></li>`;
+}
+const clientHref = (c) => buildHash({ page: "clients", id: c.id });
 function clientTable() {
-  const term = search.trim().toLowerCase();
-  const list = state.clients.filter((c) => `${c.name} ${c.email}`.toLowerCase().includes(term));
+  const term = normalizeText(route.search);
+  const list = state.clients.filter((c) => normalizeText(`${c.name} ${c.email} ${c.phone}`).includes(term));
   if (!list.length)
     return state.clients.length
       ? '<div class="empty"><h3>Nenhum cliente encontrado</h3><p>Nenhum resultado para a busca.</p><button type="button" data-action="clear-filters">Limpar busca</button></div>'
       : empty("Conheça seu próximo cliente", "Cadastre nome, contato e os dados necessários para os documentos.", "client", "Cadastrar cliente");
-  return `<div class="table-wrap"><table><thead><tr><th scope="col">Nome</th><th scope="col">E-mail</th><th scope="col">Contato</th><th scope="col">CPF / CNPJ</th><th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${list
+  const count = (c) => {
+    const n = docsOfClient(c).filter((d) => !d.archived).length;
+    return n ? `${n} ${n === 1 ? "documento" : "documentos"}` : "Nenhum documento";
+  };
+  const edit = (c) =>
+    `<button type="button" data-edit-client="${c.id}">Editar<span class="sr-only"> ${esc(c.name)}</span></button>`;
+  return `<div class="table-wrap"><table><thead><tr><th scope="col">Nome</th><th scope="col">E-mail</th><th scope="col">Contato</th><th scope="col">CPF / CNPJ</th><th scope="col">Documentos</th><th scope="col"><span class="sr-only">Ações</span></th></tr></thead><tbody>${list
     .map(
       (c) =>
-        `<tr><td><strong>${esc(c.name)}</strong></td><td>${esc(c.email)}</td><td>${esc(c.phone)}</td><td>${esc(c.document)}</td><td><button type="button" data-edit-client="${c.id}">Editar<span class="sr-only"> ${esc(c.name)}</span></button></td></tr>`,
+        `<tr data-href="${clientHref(c)}"><td><a class="row-link" href="${clientHref(c)}">${esc(c.name)}</a></td><td>${esc(c.email)}</td><td>${esc(c.phone)}</td><td>${esc(c.document)}</td><td>${count(c)}</td><td>${edit(c)}</td></tr>`,
     )
-    .join("")}</tbody></table></div>`;
+    .join("")}</tbody></table></div><ul class="doc-cards" aria-label="Clientes">${list
+    .map(
+      (c) =>
+        `<li class="doc-card" data-href="${clientHref(c)}"><div class="doc-card-head"><a class="row-link" href="${clientHref(c)}">${esc(c.name)}</a></div><p class="doc-card-sub">${esc([c.phone, c.email].filter(Boolean).join(" · ") || "Sem contato cadastrado")}</p><p class="doc-card-meta"><span>${count(c)}</span></p><div class="rowactions">${edit(c)}</div></li>`,
+    )
+    .join("")}</ul>`;
 }
+// Atualiza só a lista (sem redesenhar a página) e guarda filtros no endereço, sem novo item no histórico.
 function refreshList() {
+  history.replaceState(null, "", buildHash(route));
+  renderedHash = location.hash;
   const list = $("#list");
   if (!list) return;
-  if (page === "clients") list.innerHTML = clientTable();
+  if (route.page === "clients") list.innerHTML = clientTable();
   else {
-    const kind = page === "quotes" ? "quote" : "contract";
-    list.innerHTML = docTable(docs(kind), kind);
+    const kind = route.page === "quotes" ? "quote" : "contract",
+      tabs = $(".status-tabs");
+    list.innerHTML = docList(kind);
+    tabs?.replaceWith(document.createRange().createContextualFragment(tabsMarkup(kind)));
   }
   const rows = $$("tbody tr", list).length,
     status = $("#results-status");
@@ -760,15 +919,23 @@ function bindSettings() {
 }
 
 // ---------- Modal de formulário ----------
-function openModal(title, html, onSubmit, { onSaved, submitLabel = "Salvar", draft = null, notice = "" } = {}) {
-  const returnFocus = focusSelector(document.activeElement);
-  modal.setAttribute("aria-labelledby", "modal-title");
-  modal.innerHTML = `<form id="modalform" novalidate><div class="modal-head"><h2 id="modal-title">${title}</h2><button type="button" class="icon-button" data-close aria-label="Fechar">×</button></div><div class="modal-body"><div class="form-alerts"></div>${notice ? `<div class="modal-notice">${notice}</div>` : ""}${LEGEND}<div class="form-grid">${html}</div></div><div class="modal-foot"><button type="button" data-close>Cancelar</button><button type="submit" class="primary">${submitLabel}</button></div></form>`;
-  const form = $("#modalform"),
+// Formulário em diálogo. `dialog` permite abrir um segundo formulário por cima
+// (por exemplo, cadastrar um cliente sem fechar o orçamento).
+function openModal(
+  title,
+  html,
+  onSubmit,
+  { onSaved, submitLabel = "Salvar", draft = null, notice = "", dialog = modal, successMessage = "Salvo com sucesso.", legend = true } = {},
+) {
+  const returnFocus = focusSelector(document.activeElement),
+    titleId = `${dialog.id}-title`;
+  dialog.setAttribute("aria-labelledby", titleId);
+  dialog.innerHTML = `<form id="${dialog.id}-form" novalidate><div class="modal-head"><h2 id="${titleId}">${title}</h2><button type="button" class="icon-button" data-close aria-label="Fechar">×</button></div><div class="modal-body"><div class="form-alerts"></div>${notice ? `<div class="modal-notice">${notice}</div>` : ""}${legend ? LEGEND : ""}<div class="form-grid">${html}</div></div><div class="modal-foot"><button type="button" data-close>Cancelar</button><button type="submit" class="primary">${submitLabel}</button></div></form>`;
+  const form = $("form", dialog),
     alerts = $(".form-alerts", form);
   let pristine = "";
   const saveDraftNow = () => {
-    if (!draft || activeForm !== ctrl) return;
+    if (!draft || forms.get(dialog) !== ctrl) return;
     try {
       if (ctrl.isDirty())
         localStorage.setItem(draft, JSON.stringify({ savedAt: Date.now(), values: formValues(form) }));
@@ -778,6 +945,9 @@ function openModal(title, html, onSubmit, { onSaved, submitLabel = "Salvar", dra
   const saveDraft = debounce(saveDraftNow, 400);
   const ctrl = {
     form,
+    dialog,
+    alerts,
+    close: () => close(),
     extraValidation: () => [],
     markPristine: () => (pristine = comparable(form)),
     isDirty: () => comparable(form) !== pristine,
@@ -816,18 +986,18 @@ function openModal(title, html, onSubmit, { onSaved, submitLabel = "Salvar", dra
       });
     },
   };
-  activeForm = ctrl;
+  forms.set(dialog, ctrl);
   const close = () => {
     ctrl.discardDraft();
-    activeForm = null;
-    modal.close();
+    forms.delete(dialog);
+    if (dialog.open) dialog.close();
   };
   const requestClose = () => {
     if (!ctrl.isDirty() || confirm(DISCARD_MESSAGE)) close();
   };
   $$("[data-close]", form).forEach((button) => (button.onclick = requestClose));
-  modal.oncancel = (event) => {
-    if (activeForm !== ctrl) return;
+  dialog.oncancel = (event) => {
+    if (forms.get(dialog) !== ctrl) return;
     if (!ctrl.isDirty()) return ctrl.discardDraft();
     if (event.cancelable) {
       event.preventDefault();
@@ -836,12 +1006,12 @@ function openModal(title, html, onSubmit, { onSaved, submitLabel = "Salvar", dra
     }
     // O navegador pode impedir o cancelamento do Esc repetido: o rascunho fica guardado.
     saveDraftNow();
-    activeForm = null;
+    forms.delete(dialog);
     if (draft)
       setTimeout(() => toast("Formulário fechado. Suas alterações ficaram guardadas como rascunho neste navegador."), 0);
   };
-  modal.onclose = () => {
-    if (activeForm === ctrl && !modal.open) activeForm = null;
+  dialog.onclose = () => {
+    if (forms.get(dialog) === ctrl && !dialog.open) forms.delete(dialog);
   };
   form.addEventListener("input", (event) => {
     revalidate(event.target);
@@ -863,22 +1033,22 @@ function openModal(title, html, onSubmit, { onSaved, submitLabel = "Salvar", dra
       close();
       pendingFocus = returnFocus || "heading";
       await load();
-      toast("Salvo com sucesso.");
+      if (successMessage) toast(successMessage);
       onSaved?.(saved);
     } catch (error) {
-      if (modal.open) showSummary(alerts, [{ message: error.message }], "Não foi possível salvar");
+      if (dialog.open) showSummary(alerts, [{ message: error.message }], "Não foi possível salvar");
       else toast(error.message, "error");
     } finally {
       button.disabled = false;
       button.textContent = label;
     }
   };
-  modal.showModal();
+  dialog.showModal();
   ctrl.markPristine();
   return ctrl;
 }
-function editClient(c = {}, onSaved, { notice = "" } = {}) {
-  openModal(
+function editClient(c = {}, onSaved, { notice = "", dialog = modal } = {}) {
+  return openModal(
     c.id ? "Editar cliente" : "Novo cliente",
     field("Nome completo", "name", c.name, "text", true, false, { attrs: 'autocomplete="off"' }) +
       field("CPF / CNPJ", "document", maskDocument(c.document), "text", false, false, {
@@ -894,7 +1064,7 @@ function editClient(c = {}, onSaved, { notice = "" } = {}) {
         hint: "Usado no contrato.",
       }),
     (b) => api("/records/clients", { ...b, id: c.id }),
-    { onSaved, submitLabel: "Salvar cliente", notice },
+    { onSaved, submitLabel: "Salvar cliente", notice, dialog, successMessage: c.id ? "Cliente salvo." : "Cliente cadastrado." },
   );
 }
 function editPackage(p = {}) {
@@ -908,23 +1078,8 @@ function editPackage(p = {}) {
     { submitLabel: "Salvar pacote" },
   );
 }
-function editDoc(type, d = {}, { notice = "" } = {}) {
-  if (!state.clients.length && !d.id) {
-    page = "clients";
-    render();
-    editClient(
-      {},
-      (client) => {
-        page = type === "quote" ? "quotes" : "contracts";
-        render();
-        editDoc(type, { ...d, clientId: client.id });
-      },
-      {
-        notice: `Cadastre o cliente primeiro. Em seguida, o ${type === "quote" ? "orçamento" : "contrato"} abre com ele selecionado.`,
-      },
-    );
-    return;
-  }
+// Sem clientes cadastrados, o próprio campo Cliente oferece o cadastro (sem sair do formulário).
+function editDoc(type, d = {}, { notice = "", draftId } = {}) {
   const isQuote = type === "quote",
     isNew = !d.id,
     templates = state.quoteTemplates || QUOTE_TEMPLATES,
@@ -965,9 +1120,6 @@ function editDoc(type, d = {}, { notice = "" } = {}) {
   if (isQuote && isNew && !data.validUntil) data.validUntil = addDays(today(), validityDays());
   // Sem cliente pré-selecionado: a escolha é sempre explícita.
   const selectedClientId = d.clientId ?? d.client?.id ?? "";
-  const clientOptions = state.clients.map((client) => [client.id, client.name]);
-  if (d.client && !clientOptions.some(([id]) => String(id) === String(selectedClientId)))
-    clientOptions.unshift([selectedClientId, `${d.client.name} (dados do documento)`]);
   const num = (index) => String(isQuote ? index + 1 : index).padStart(2, "0");
   const quoteFields = isQuote
     ? `${section("01 · Modelo do orçamento")}${select(
@@ -1011,14 +1163,7 @@ function editDoc(type, d = {}, { notice = "" } = {}) {
       )}${area("Condições do cartão (editáveis)", "cardTerms", data.cardTerms)}<p class="helper full" id="quote-payment-helper"></p></div>`
     : "";
   const paymentsBlock = `<div class="field full payments" id="payments-field"><span class="label" id="payments-label">Vencimentos do pagamento <span class="optional">(opcional)</span></span><p class="hint" id="payments-hint">Registre pagamentos já combinados. A soma precisa ser igual ao total do documento.${isQuote ? " Nas condições de cartão dos modelos, os vencimentos não são obrigatórios." : ""}</p><div class="payment-head" id="payment-head" aria-hidden="true" hidden><span>Vencimento</span><span>Valor</span></div><div id="payments" role="group" aria-labelledby="payments-label" aria-describedby="payments-hint payment-sum"></div><p class="payment-sum" id="payment-sum"></p><div class="payment-actions"><button type="button" id="addpayment"><span aria-hidden="true">＋</span> Adicionar parcela</button><button type="button" id="splitpayments" hidden>Distribuir o total igualmente</button></div></div>`;
-  const html = `${quoteFields}${section(`${num(1)} · Cliente e evento`)}${select(
-    "Cliente",
-    "clientId",
-    clientOptions,
-    selectedClientId,
-    true,
-    { placeholder: "Selecione o cliente" },
-  )}${select(
+  const html = `${quoteFields}${section(`${num(1)} · Cliente e evento`)}${clientCombo(selectedClientId, d.client)}${select(
     "Situação",
     "status",
     Object.entries(statuses).filter(([v]) => type === "contract" || v !== "signed"),
@@ -1125,9 +1270,10 @@ function editDoc(type, d = {}, { notice = "" } = {}) {
   };
   const ctrl = openModal(`${isNew ? "Novo" : "Editar"} ${isQuote ? "orçamento" : "contrato"}`, html, onSubmit, {
     submitLabel: `Salvar ${isQuote ? "orçamento" : "contrato"}`,
-    draft: draftKey(type, d.id),
+    draft: draftKey(type, draftId ?? d.id),
     notice,
   });
+  const combo = bindClientCombo(ctrl, d.client);
   const form = ctrl.form,
     paymentList = $("#payments", form),
     input = (name) => $(`#f-${name}`, form);
@@ -1335,6 +1481,7 @@ function editDoc(type, d = {}, { notice = "" } = {}) {
     }
     paymentList.innerHTML = "";
     for (const [dateValue, amount] of values.__payments || []) addPayment({ date: dateValue, amount });
+    combo.syncLabel();
     updatePrice();
   };
 
@@ -1343,23 +1490,133 @@ function editDoc(type, d = {}, { notice = "" } = {}) {
   ctrl.markPristine();
   ctrl.offerDraft(fillForm);
 }
+// ---------- Campo Cliente com busca e cadastro na hora (padrão combobox do WAI-ARIA) ----------
+function clientCombo(selectedId, snapshot) {
+  const selected = findClient(selectedId);
+  const label = selected
+    ? selected.name
+    : snapshot && selectedId !== ""
+      ? `${snapshot.name} (dados do documento)`
+      : "";
+  return `<div class="field combo"><label for="f-client-search">Cliente${REQUIRED}</label><div class="combo-box"><input id="f-client-search" type="text" role="combobox" aria-autocomplete="list" aria-expanded="false" aria-controls="client-options" aria-describedby="client-hint" autocomplete="off" required data-combo-input="clientId" value="${esc(label)}" placeholder="Digite o nome do cliente"><input type="hidden" id="f-clientId" name="clientId" value="${esc(selectedId ?? "")}"><ul id="client-options" role="listbox" aria-label="Clientes" hidden></ul></div><p class="hint" id="client-hint">Busque pelo nome ou cadastre um cliente novo sem sair deste formulário.</p></div>`;
+}
+function bindClientCombo(ctrl, snapshot) {
+  const form = ctrl.form,
+    box = $("#f-client-search", form),
+    hidden = form.elements.namedItem("clientId"),
+    list = $("#client-options", form);
+  let options = [],
+    active = -1;
+  const labelFor = (id) =>
+    findClient(id)?.name ??
+    (snapshot && id !== "" && String(snapshot.id ?? id) === String(id) ? `${snapshot.name} (dados do documento)` : "");
+  const close = () => {
+    list.hidden = true;
+    box.setAttribute("aria-expanded", "false");
+    box.removeAttribute("aria-activedescendant");
+    active = -1;
+  };
+  const highlight = (index) => {
+    active = index;
+    [...list.children].forEach((li, i) => li.classList.toggle("active", i === index));
+    const li = list.children[index];
+    if (li) {
+      box.setAttribute("aria-activedescendant", li.id);
+      li.scrollIntoView({ block: "nearest" });
+    } else box.removeAttribute("aria-activedescendant");
+  };
+  const open = () => {
+    const query = normalizeText(box.value),
+      typed = box.value.trim();
+    const matches = state.clients
+      .filter((c) => !query || normalizeText(`${c.name} ${c.email} ${c.phone}`).includes(query))
+      .slice(0, 8);
+    options = [
+      ...matches.map((c) => ({ id: c.id, label: c.name, sub: [c.phone, c.email].filter(Boolean).join(" · ") })),
+      { create: true, label: typed ? `Cadastrar “${typed}” como novo cliente` : "Cadastrar novo cliente" },
+    ];
+    list.innerHTML = options
+      .map(
+        (o, i) =>
+          `<li id="client-opt-${i}" role="option" aria-selected="${!o.create && String(o.id) === hidden.value}" class="${o.create ? "create" : ""}" data-index="${i}">${o.create ? '<span aria-hidden="true">＋ </span>' : ""}${esc(o.label)}${o.sub ? `<small>${esc(o.sub)}</small>` : ""}</li>`,
+      )
+      .join("");
+    list.hidden = false;
+    box.setAttribute("aria-expanded", "true");
+    highlight(query && matches.length ? 0 : -1);
+  };
+  const select = (client) => {
+    hidden.value = client.id;
+    box.value = client.name;
+    revalidate(box);
+    ctrl.changed();
+  };
+  // Cadastro em um segundo diálogo, por cima do orçamento, que continua aberto.
+  const create = (name) =>
+    editClient({ name }, (client) => {
+      if (client?.id) select({ id: client.id, name: client.name });
+      box.focus();
+    }, { dialog: subdialog });
+  const choose = (option) => {
+    close();
+    if (option.create) create(box.value.trim());
+    else select(option);
+  };
+  box.addEventListener("input", () => {
+    if (box.value !== labelFor(hidden.value)) hidden.value = "";
+    open();
+    ctrl.changed();
+  });
+  box.addEventListener("click", () => list.hidden && open());
+  box.addEventListener("keydown", (event) => {
+    if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+      event.preventDefault();
+      if (list.hidden) open();
+      const n = options.length;
+      highlight(event.key === "ArrowDown" ? (active + 1) % n : (active - 1 + n) % n);
+    } else if (event.key === "Enter" && !list.hidden && active >= 0) {
+      event.preventDefault();
+      choose(options[active]);
+    } else if (event.key === "Escape" && !list.hidden) {
+      // Fecha só a lista; o Esc não chega ao diálogo.
+      event.preventDefault();
+      event.stopPropagation();
+      close();
+    } else if (event.key === "Tab") close();
+  });
+  box.addEventListener("blur", () =>
+    setTimeout(() => {
+      if (document.activeElement === box) return;
+      close();
+      // Nome digitado igual ao de um cliente cadastrado: seleciona sem exigir clique.
+      const exact = !hidden.value && state.clients.find((c) => normalizeText(c.name) === normalizeText(box.value));
+      if (exact) select(exact);
+    }, 150),
+  );
+  list.addEventListener("mousedown", (event) => event.preventDefault());
+  list.addEventListener("click", (event) => {
+    const li = event.target.closest("[data-index]");
+    if (li) choose(options[Number(li.dataset.index)]);
+  });
+  return { syncLabel: () => (box.value = labelFor(hidden.value)) };
+}
 async function convertQuote(id, button) {
   const quote = findDoc(id);
   if (!quote) return;
   const existing = contractFor(quote);
   if (existing) {
+    pushRoute(docHref(existing));
+    render();
     editDoc("contract", existing, {
       notice: `Este orçamento já tem o contrato <strong>${esc(existing.number)}</strong>. Revise os dados e salve.`,
     });
     return;
   }
-  button.disabled = true;
+  if (button) button.disabled = true;
   try {
     const contract = await api(`/documents/${quote.id}/convert`, {});
-    page = "contracts";
-    search = "";
-    filter = "all";
-    pendingFocus = `[data-edit-doc="${contract.id}"]`;
+    // Abre a tela do contrato novo e, por cima, o formulário para revisão.
+    pushRoute(buildHash({ page: "contracts", id: contract.id }));
     await load();
     const fresh = findDoc(contract.id) || contract;
     editDoc("contract", fresh, {
@@ -1367,73 +1624,532 @@ async function convertQuote(id, button) {
     });
   } catch (error) {
     toast(error.message, "error");
-    button.disabled = false;
+    if (button) button.disabled = false;
   }
 }
 
-// ---------- Navegação e eventos ----------
-function navigate(target) {
-  if (pageGuard?.() && !confirm(LEAVE_MESSAGE)) return;
-  page = target;
-  search = "";
-  filter = "all";
+// ---------- Tela do documento: resumo, histórico e ações ----------
+const dl = (rows) =>
+  `<dl class="facts">${rows
+    .filter(([, value]) => value !== "" && value != null)
+    .map(([term, value]) => `<div><dt>${term}</dt><dd>${value}</dd></div>`)
+    .join("")}</dl>`;
+const panel = (title, body, cls = "") => `<section class="panel detail-panel${cls ? ` ${cls}` : ""}"><h2>${title}</h2>${body}</section>`;
+function docDetail(d) {
+  const isQuote = d.type === "quote",
+    status = displayStatus(d),
+    contract = isQuote ? contractFor(d) : null,
+    source = !isQuote && d.sourceId ? findDoc(d.sourceId) : null,
+    client = findClient(d.clientId ?? d.client?.id),
+    snap = d.client || {};
+  const actions = d.archived
+    ? `<button type="button" class="primary" data-restore="${d.id}">Restaurar</button><button type="button" class="danger-outline" data-delete="${d.id}">Excluir definitivamente</button>`
+    : `${d.status !== "cancelled" ? `<button type="button" class="primary" data-send="${d.id}">${icon("chat")} Enviar pelo WhatsApp</button>` : ""}<button type="button" data-edit-doc="${d.id}">Editar</button><button type="button" data-preview-pdf="${d.id}">Visualizar PDF<span class="sr-only"> (abre em nova aba)</span> <span aria-hidden="true">↗</span></button>${isQuote ? (contract ? linkButton(docHref(contract), "Ver contrato") : `<button type="button" data-convert="${d.id}">Gerar contrato</button>`) : ""}<button type="button" class="icon-button dots" data-menu="${d.id}" popovertarget="row-menu" aria-label="Mais ações">${icon("more")}</button>`;
+  const banner = d.archived
+    ? `<div class="notice archived-banner" role="note">Este ${isQuote ? "orçamento" : "contrato"} está arquivado${d.archivedAt ? ` desde ${dateTime(d.archivedAt)}` : ""}. Ele não aparece nas listas nem no painel. Restaure para editar ou enviar.</div>`
+    : "";
+  const payments = (d.payments || []).length
+    ? `<ul class="plain-list">${d.payments.map((p, i) => `<li><span>${i + 1}ª parcela · ${date(p.date)}</span><strong>${money(p.amount)}</strong></li>`).join("")}</ul>`
+    : "";
+  const choice = d.templateId && d.paymentChoice ? (d.paymentChoice === "installments" ? "Parcelado" : "À vista") : "";
+  const values = panel(
+    "Valores e pagamento",
+    `<p class="detail-total">${money(d.total)}</p>${dl([
+      ["Condição escolhida", choice],
+      ["Cartão", d.paymentChoice === "installments" ? esc(d.cardTerms || "") : ""],
+      ["Hora adicional", Number(d.extraHour) > 0 ? money(d.extraHour) : ""],
+      ["Validade", isQuote && d.validUntil ? date(d.validUntil) : ""],
+      ["Forma de pagamento", esc(d.paymentNotes || "")],
+    ])}${payments}`,
+  );
+  const event = panel(
+    "Evento",
+    dl([
+      ["Data", date(d.date)],
+      ["Local", esc(d.venue || "A definir")],
+      ["Convidados", esc(d.guests || "")],
+      ["Montagem", esc(d.setup || "")],
+      ["Cerimônia", esc(d.ceremony || "")],
+      ["Início", esc(d.start || "")],
+      ["Término", esc(d.end || "")],
+    ]),
+  );
+  const who = panel(
+    "Cliente",
+    dl([
+      ["Nome", client ? `<a href="${clientHref(client)}">${esc(client.name)}</a>` : esc(snap.name)],
+      ["WhatsApp", esc(snap.phone || "")],
+      ["E-mail", snap.email ? `<a href="mailto:${esc(snap.email)}">${esc(snap.email)}</a>` : ""],
+      ["CPF / CNPJ", esc(snap.document || "")],
+      ["Endereço", esc(snap.address || "")],
+    ]) + (client ? "" : '<p class="hint">Cadastro do cliente não encontrado; dados registrados na emissão.</p>'),
+  );
+  const services = panel(
+    "Serviços",
+    `<p class="detail-strong">${esc(d.packageName || "")}</p><ul class="plain-list bullets">${String(d.equipment || "").split("\n").filter(Boolean).map((x) => `<li>${esc(x)}</li>`).join("")}</ul>${d.notes ? `<p class="detail-notes">${esc(d.notes)}</p>` : ""}`,
+  );
+  const link = isQuote
+    ? contract
+      ? `<p>Contrato <a href="${docHref(contract)}"><span class="doc-number">${esc(contract.number)}</span></a> gerado a partir deste orçamento.</p>`
+      : "<p>Nenhum contrato gerado ainda.</p>"
+    : source
+      ? `<p>Gerado do orçamento <a href="${docHref(source)}"><span class="doc-number">${esc(source.number)}</span></a>.</p>`
+      : "<p>Contrato criado sem orçamento de origem.</p>";
+  const timeline = `<ol class="timeline">${historyEvents(d).map((e) => `<li><time datetime="${esc(e.at)}">${dateTime(e.at)}</time><span>${esc(e.text)}</span></li>`).join("")}</ol>`;
+  return {
+    title: `${docKind(d)} ${d.number}`,
+    crumbs: [HOME, sectionCrumb(listPageFor(d.type)), { label: d.number || docKind(d) }],
+    html: `${banner}<div class="page-head detail-head"><div><p class="doc-kicker">${docKind(d)} <span class="doc-number">${esc(d.number || "")}</span></p><h1 tabindex="-1">${esc(d.event || docKind(d))}</h1><p>${esc(snap.name)} · ${date(d.date)}${d.venue ? ` · ${esc(d.venue)}` : ""}</p><div class="detail-status">${badge(d.archived ? "archived" : status)}${d.archived ? "" : validityNote(d, status)}</div></div><div class="actions">${actions}</div></div><div class="detail-grid">${values}${event}${who}${services}${panel(isQuote ? "Contrato" : "Origem", link)}${panel("Histórico", timeline)}</div>`,
+  };
+}
+
+// ---------- Tela do cliente: contato, resumo e documentos ----------
+function clientDetail(c) {
+  const all = docsOfClient(c),
+    active = all.filter((d) => !d.archived),
+    contracts = active.filter((d) => d.type === "contract"),
+    closed = contracts.filter((d) => ["approved", "signed"].includes(d.status)),
+    next = contracts
+      .filter((d) => d.date >= today() && d.status !== "cancelled")
+      .sort((a, b) => a.date.localeCompare(b.date))[0],
+    wa = whatsappNumber(c.phone);
+  const contact = panel(
+    "Contato",
+    dl([
+      ["WhatsApp", c.phone ? `${esc(c.phone)}${wa ? ` · <a href="https://wa.me/${wa}" target="_blank" rel="noopener noreferrer">Abrir conversa<span class="sr-only"> (abre em nova aba)</span></a>` : ""}` : ""],
+      ["E-mail", c.email ? `<a href="mailto:${esc(c.email)}">${esc(c.email)}</a>` : ""],
+      ["CPF / CNPJ", esc(c.document || "")],
+      ["Endereço", esc(c.address || "")],
+    ]) || '<p class="hint">Nenhum contato cadastrado.</p>',
+  );
+  const summary = panel(
+    "Resumo",
+    dl([
+      ["Orçamentos", String(active.length - contracts.length)],
+      ["Contratos", String(contracts.length)],
+      ["Valor contratado", money(closed.reduce((s, d) => s + Number(d.total || 0), 0))],
+      ["Próximo evento", next ? `<a href="${docHref(next)}">${date(next.date)} · ${esc(next.event)}</a>` : "Nenhum agendado"],
+    ]),
+  );
+  const list = docEntries(entriesOf(sortDocs(all, "recent")), {
+    compact: true,
+    emptyHtml: empty("Nenhum documento ainda", "Crie o primeiro orçamento para este cliente.", "", ""),
+  });
+  return {
+    title: c.name,
+    crumbs: [HOME, sectionCrumb("clients"), { label: c.name }],
+    html: `<div class="page-head detail-head"><div><p class="doc-kicker">Cliente</p><h1 tabindex="-1">${esc(c.name)}</h1><p>${esc([c.phone, c.email].filter(Boolean).join(" · ") || "Sem contato cadastrado")}</p></div><div class="actions"><button type="button" class="primary" data-new-for="${c.id}"><span aria-hidden="true">＋</span> Novo orçamento</button><button type="button" data-edit-client="${c.id}">Editar cliente</button><button type="button" class="danger-outline" data-delete-client="${c.id}">Excluir cliente</button></div></div><div class="detail-grid two">${contact}${summary}</div><section class="panel panel-gap"><div class="panel-title"><h2>Documentos</h2></div>${list}</section>`,
+  };
+}
+
+// ---------- Novo orçamento: escolher modelo ou começar em branco ----------
+function openPicker(extra = {}) {
+  const templates = state.quoteTemplates || QUOTE_TEMPLATES;
+  const tags = (t) => (t.offers.length > 1 ? `${t.offers.length} opções de serviço` : "Pacote completo");
+  picker.innerHTML = `<div class="modal-head"><h2 id="picker-title">Novo orçamento</h2><button type="button" class="icon-button" data-picker-close aria-label="Fechar">×</button></div><div class="modal-body"><p class="picker-intro">Escolha um modelo pronto ou comece em branco. Tudo continua editável.</p><div class="picker-grid">${templates
+    .map(
+      (t) =>
+        `<button type="button" class="picker-option" data-pick="${esc(t.id)}"><img src="/quote-assets/estrutura.png" alt="" loading="lazy"><span class="picker-name">${esc(t.name)}</span><span class="picker-desc">${esc(t.description)}</span><span class="picker-tag">${tags(t)}</span></button>`,
+    )
+    .join("")}<button type="button" class="picker-option blank" data-pick=""><span class="picker-plus" aria-hidden="true">＋</span><span class="picker-name">Começar em branco</span><span class="picker-desc">Sem modelo: serviços e valores do seu jeito.</span></button></div></div>`;
+  picker.onclick = (event) => {
+    const button = event.target.closest("[data-pick], [data-picker-close]");
+    if (!button) return;
+    picker.close();
+    if ("pick" in button.dataset)
+      editDoc("quote", { ...extra, ...(button.dataset.pick ? { templateId: button.dataset.pick } : {}) });
+  };
+  picker.showModal();
+}
+// ---------- Confirmação de ações sem volta ----------
+function confirmAction({ title, message, confirmLabel }) {
+  return new Promise((resolve) => {
+    confirmBox.innerHTML = `<div class="modal-head"><h2 id="confirm-title">${esc(title)}</h2></div><div class="modal-body"><p id="confirm-text" class="confirm-text">${message}</p></div><div class="modal-foot"><button type="button" data-answer="no">Cancelar</button><button type="button" class="danger" data-answer="yes">${esc(confirmLabel)}</button></div>`;
+    let answered = false;
+    const done = (value) => {
+      if (answered) return;
+      answered = true;
+      if (confirmBox.open) confirmBox.close();
+      resolve(value);
+    };
+    confirmBox.onclick = (event) => {
+      const answer = event.target.closest("[data-answer]")?.dataset.answer;
+      if (answer) done(answer === "yes");
+    };
+    confirmBox.onclose = () => done(false);
+    confirmBox.showModal();
+    $('[data-answer="no"]', confirmBox).focus(); // a opção segura recebe o foco
+  });
+}
+// ---------- Arquivar, restaurar, excluir e duplicar ----------
+async function archiveDoc(id) {
+  const d = findDoc(id);
+  if (!d) return;
+  try {
+    await api(`/documents/${id}/archive`, {});
+  } catch (error) {
+    return toast(error.message, "error");
+  }
+  pendingFocus = route.id === id ? "heading" : "#search";
+  await load();
+  toast(`${docKind(d)} ${d.number} arquivado. Ele sai das listas e do painel.`, "success", {
+    action: { label: "Desfazer", onClick: () => restoreDoc(id) },
+  });
+}
+async function restoreDoc(id) {
+  const d = findDoc(id);
+  try {
+    await api(`/documents/${id}/restore`, {});
+  } catch (error) {
+    return toast(error.message, "error");
+  }
+  if (route.id !== id) pendingFocus = "#search";
+  await load();
+  toast(`${d ? `${docKind(d)} ${d.number}` : "Documento"} restaurado.`);
+}
+async function deleteDoc(id) {
+  const d = findDoc(id);
+  if (!d) return;
+  const linked =
+    d.type === "quote" && contractFor(d)
+      ? ` O contrato ${esc(contractFor(d).number)} continua salvo.`
+      : "";
+  const ok = await confirmAction({
+    title: "Excluir definitivamente?",
+    message: `${docKind(d)} <strong>${esc(d.number)}</strong> de ${esc(d.client?.name)} será apagado. Esta ação não pode ser desfeita.${linked}`,
+    confirmLabel: "Excluir definitivamente",
+  });
+  if (!ok) return;
+  try {
+    await api(`/documents/${id}`, null, { method: "DELETE" });
+  } catch (error) {
+    return toast(error.message, "error");
+  }
+  if (route.id === id) {
+    history.replaceState(null, "", buildHash({ page: listPageFor(d.type), filter: "archived" }));
+    route = parseRoute(location.hash);
+  }
+  pendingFocus = "heading";
+  await load();
+  toast(`${docKind(d)} ${d.number} excluído.`);
+}
+// Cópia como rascunho novo: mantém serviços, valores e condições; cliente, evento e data ficam em branco.
+function duplicateDoc(id) {
+  const d = findDoc(id);
+  if (!d) return;
+  const copy = { ...d, status: "draft", copiedFrom: d.number };
+  for (const key of ["id", "number", "company", "createdAt", "updatedAt", "history", "sentAt", "archived", "archivedAt", "sourceId", "quoteTemplate", "client", "clientId", "date", "event", "guests", "payments"])
+    delete copy[key];
+  if (d.type === "quote") copy.validUntil = addDays(today(), validityDays());
+  editDoc(d.type, copy, {
+    notice: `Cópia de <strong>${esc(d.number)}</strong>. Escolha o cliente e informe o evento e a data.`,
+    draftId: `copia-${d.id}`,
+  });
+}
+
+async function deleteClient(id) {
+  const c = findClient(id);
+  if (!c) return;
+  const n = docsOfClient(c).length;
+  const ok = await confirmAction({
+    title: "Excluir cliente?",
+    message: `O cadastro de <strong>${esc(c.name)}</strong> será apagado. ${n ? `${n === 1 ? "O documento dele continua salvo" : `Os ${n} documentos dele continuam salvos`} com os dados registrados na emissão.` : "Não há documentos deste cliente."} Esta ação não pode ser desfeita.`,
+    confirmLabel: "Excluir cliente",
+  });
+  if (!ok) return;
+  try {
+    await api(`/records/clients/${id}`, null, { method: "DELETE" });
+  } catch (error) {
+    return toast(error.message, "error");
+  }
+  if (route.page === "clients" && route.id === id) {
+    history.replaceState(null, "", buildHash({ page: "clients" }));
+    route = parseRoute(location.hash);
+  }
+  pendingFocus = "heading";
+  await load();
+  toast(`Cliente ${c.name} excluído.`);
+}
+async function deletePackage(id) {
+  const p = state.packages.find((x) => x.id === id);
+  if (!p) return;
+  const ok = await confirmAction({
+    title: "Excluir pacote?",
+    message: `O pacote <strong>${esc(p.name)}</strong> sai do catálogo. Orçamentos e contratos já emitidos não mudam. Esta ação não pode ser desfeita.`,
+    confirmLabel: "Excluir pacote",
+  });
+  if (!ok) return;
+  try {
+    await api(`/records/packages/${id}`, null, { method: "DELETE" });
+  } catch (error) {
+    return toast(error.message, "error");
+  }
+  pendingFocus = "heading";
+  await load();
+  toast(`Pacote ${p.name} excluído.`);
+}
+
+// ---------- Enviar pelo WhatsApp ----------
+// Abre a conversa com mensagem pronta (o PDF vai como anexo) e registra o envio no histórico.
+function sendDialog(id) {
+  const d = findDoc(id);
+  if (!d) return;
+  const client = findClient(d.clientId ?? d.client?.id) || d.client || {},
+    isDraft = d.status === "draft",
+    noun = d.type === "quote" ? "orçamento" : "contrato";
+  const html = `${field("WhatsApp do cliente", "waPhone", maskPhone(client.phone || ""), "tel", false, false, {
+    attrs: 'data-mask="phone" autocomplete="off"',
+    hint: "Com DDD. Sem número, o WhatsApp pede para escolher o contato.",
+  })}${area("Mensagem", "waMessage", whatsappMessage(d, { company: d.company || state.settings }), true, { attrs: 'rows="9"' })}<div class="field full send-pdf"><span class="label">PDF do ${noun}</span><p class="hint">O WhatsApp abre em outra aba com a mensagem. Baixe o PDF e anexe na conversa.</p><div class="payment-actions"><a class="btn" href="/api/documents/${d.id}/pdf" download>Baixar PDF</a><button type="button" id="share-pdf" hidden>Compartilhar PDF</button></div></div><div class="field full"><label class="check"><input type="checkbox" name="markSent" checked> ${isDraft ? "Marcar como enviado (sai de Rascunho)" : "Registrar o envio no histórico"}</label></div>`;
+  const ctrl = openModal(`Enviar ${noun} pelo WhatsApp`, html, (b) => {
+    // A aba precisa abrir ainda no clique, antes de qualquer espera, para não ser bloqueada.
+    const tab = window.open(whatsappLink(whatsappNumber(b.waPhone), b.waMessage), "_blank");
+    if (!tab) throw Error("O navegador bloqueou a nova aba. Permita pop-ups para este endereço e tente de novo.");
+    tab.opener = null;
+    return b.markSent === "on" ? api(`/documents/${d.id}/sent`, { channel: "whatsapp" }) : null;
+  }, {
+    submitLabel: "Abrir WhatsApp",
+    successMessage: "",
+    legend: false,
+    onSaved: (saved) => toast(saved ? "WhatsApp aberto em outra aba. Envio registrado." : "WhatsApp aberto em outra aba."),
+  });
+  const form = ctrl.form,
+    phone = $("#f-waPhone", form);
+  ctrl.extraValidation = () =>
+    phone.value.trim() && !whatsappNumber(phone.value)
+      ? [{ el: phone, message: "Informe o número com DDD, por exemplo (47) 99999-0000." }]
+      : [];
+  // Celular e computadores com compartilhamento nativo: envia o arquivo direto para o WhatsApp.
+  const share = $("#share-pdf", form);
+  if (!navigator.canShare?.({ files: [new File([""], "teste.pdf", { type: "application/pdf" })] })) return;
+  share.hidden = false;
+  const file = fetch(`/api/documents/${d.id}/pdf`)
+    .then((r) => (r.ok ? r.blob() : Promise.reject(Error())))
+    .then((blob) => new File([blob], `${d.number}.pdf`, { type: "application/pdf" }))
+    .catch(() => null);
+  share.onclick = async () => {
+    const pdf = await file;
+    try {
+      if (!pdf) throw Error("Não foi possível preparar o PDF.");
+      await navigator.share({ files: [pdf], text: $("#f-waMessage", form).value });
+    } catch (error) {
+      if (error.name !== "AbortError")
+        showSummary(ctrl.alerts, [{ message: error.message || "O compartilhamento não foi concluído." }], "Não foi possível compartilhar");
+      return;
+    }
+    const saved = $('[name="markSent"]', form).checked
+      ? await api(`/documents/${d.id}/sent`, { channel: "share" }).catch(() => null)
+      : null;
+    ctrl.close();
+    await load();
+    toast(saved ? "PDF compartilhado. Envio registrado." : "PDF compartilhado.");
+  };
+}
+
+// ---------- Menu "⋯" das linhas (um único popover, preenchido para a linha clicada) ----------
+function menuItems(d) {
+  const button = (attr, label, cls = "") => `<button type="button"${cls ? ` class="${cls}"` : ""} ${attr}>${label}</button>`;
+  if (d.archived)
+    return [
+      button(`data-restore="${d.id}"`, "Restaurar"),
+      button(`data-pdf="${d.id}"`, "Baixar PDF"),
+      "<hr>",
+      button(`data-delete="${d.id}"`, "Excluir definitivamente", "danger-text"),
+    ].join("");
+  const contract = d.type === "quote" ? contractFor(d) : null,
+    source = d.type === "contract" && d.sourceId ? findDoc(d.sourceId) : null;
+  return [
+    `<a href="${docHref(d)}">Abrir ${d.type === "quote" ? "orçamento" : "contrato"}</a>`,
+    button(`data-preview-pdf="${d.id}"`, 'Visualizar PDF<span class="sr-only"> (abre em nova aba)</span> <span aria-hidden="true">↗</span>'),
+    button(`data-pdf="${d.id}"`, "Baixar PDF"),
+    d.status !== "cancelled" ? button(`data-send="${d.id}"`, "Enviar pelo WhatsApp") : "",
+    button(`data-edit-doc="${d.id}"`, "Editar"),
+    button(`data-duplicate="${d.id}"`, "Duplicar"),
+    d.type === "quote"
+      ? contract
+        ? `<a href="${docHref(contract)}">Ver contrato</a>`
+        : button(`data-convert="${d.id}"`, "Gerar contrato")
+      : source
+        ? `<a href="${docHref(source)}">Ver orçamento de origem</a>`
+        : "",
+    "<hr>",
+    button(`data-archive="${d.id}"`, "Arquivar"),
+  ].join("");
+}
+function prepareRowMenu(button, event) {
+  const d = findDoc(button.dataset.menu);
+  if (!d) return event.preventDefault();
+  const open = rowMenu.matches(":popover-open");
+  if (open && menuTrigger === button) return; // o próprio botão fecha o menu
+  if (open) {
+    event.preventDefault();
+    rowMenu.hidePopover();
+  }
+  rowMenu.innerHTML = `<p class="menu-title" id="row-menu-title">${esc(d.client?.name)} · <span class="doc-number">${esc(d.number || "")}</span></p>${menuItems(d)}`;
+  rowMenu.setAttribute("aria-labelledby", "row-menu-title");
+  menuTrigger = button;
+  rowMenu.dataset.keyboard = event.detail === 0 ? "1" : "";
+  const r = button.getBoundingClientRect();
+  rowMenu.style.top = `${r.bottom + 6}px`;
+  rowMenu.style.left = `${Math.max(8, r.right - 240)}px`;
+  if (open) rowMenu.showPopover({ source: button });
+}
+function positionMenu() {
+  if (!menuTrigger?.isConnected) return;
+  const r = menuTrigger.getBoundingClientRect(),
+    w = rowMenu.offsetWidth,
+    h = rowMenu.offsetHeight;
+  const top = r.bottom + 6 + h > innerHeight - 8 ? Math.max(8, r.top - h - 6) : r.bottom + 6;
+  rowMenu.style.top = `${top}px`;
+  rowMenu.style.left = `${Math.min(Math.max(8, r.right - w), innerWidth - w - 8)}px`;
+}
+let menuHadFocus = false;
+rowMenu.addEventListener("beforetoggle", (event) => {
+  if (event.newState === "closed") menuHadFocus = rowMenu.contains(document.activeElement);
+});
+rowMenu.addEventListener("toggle", (event) => {
+  if (event.newState === "open") {
+    positionMenu();
+    if (rowMenu.dataset.keyboard) $("a, button", rowMenu)?.focus();
+  } else if (menuHadFocus && menuTrigger?.isConnected && !document.querySelector("dialog[open]"))
+    menuTrigger.focus();
+});
+// Setas, Home e End percorrem as opções; Tab fecha e volta para o botão "⋯".
+rowMenu.addEventListener("keydown", (event) => {
+  const items = $$("a, button", rowMenu),
+    i = items.indexOf(document.activeElement),
+    n = items.length;
+  const move = { ArrowDown: (i + 1) % n, ArrowUp: (i - 1 + n) % n, Home: 0, End: n - 1 }[event.key];
+  if (move !== undefined) {
+    event.preventDefault();
+    items[move]?.focus();
+  } else if (event.key === "Tab") {
+    event.preventDefault();
+    rowMenu.hidePopover();
+  }
+});
+addEventListener("resize", () => rowMenu.matches(":popover-open") && rowMenu.hidePopover());
+
+// ---------- Navegação por endereço (hash) ----------
+const routeKey = (r) => `${r.page}/${r.id ?? ""}`;
+// Troca a tela atual por outra, criando um item no histórico (o botão Voltar funciona).
+function pushRoute(hash) {
+  scrollMemory.set(routeKey(route), scrollY);
+  history.pushState(null, "", hash);
+  route = parseRoute(hash);
+  pendingFocus = "heading";
+  window.scrollTo(0, 0);
+}
+// Desenha a tela do endereço atual. Voltando de um documento para a lista,
+// a lista volta na mesma posição de rolagem.
+function onRoute() {
+  const previous = route;
+  scrollMemory.set(routeKey(previous), scrollY);
+  route = parseRoute(location.hash);
   pendingFocus = "heading";
   render();
+  const back = previous.id != null && route.id == null && previous.page === route.page;
+  window.scrollTo(0, back ? scrollMemory.get(routeKey(route)) || 0 : 0);
 }
-function onRootClick(event) {
+// Links internos passam por aqui para confirmar a saída de formulários alterados.
+function navigate(hash) {
+  if (pageGuard?.() && !confirm(LEAVE_MESSAGE)) return false;
+  pageGuard = null;
+  if (hash === location.hash || (hash === "#/" && !location.hash)) onRoute();
+  else location.hash = hash;
+  return true;
+}
+window.addEventListener("hashchange", () => {
+  // Na tela de login o endereço fica guardado para abrir a tela certa depois de entrar.
+  if (!user || !state || location.hash === renderedHash) return;
+  // Voltar/Avançar do navegador com alterações não salvas: se cancelar, permanece na tela.
+  if (pageGuard?.() && !confirm(LEAVE_MESSAGE)) {
+    history.pushState(null, "", renderedHash || "#/");
+    return;
+  }
+  pageGuard = null;
+  onRoute();
+});
+history.scrollRestoration = "manual";
+// ---------- Eventos ----------
+function onClick(event) {
+  if (event.defaultPrevented || event.target.closest("dialog")) return;
   const target = event.target.closest("button, a");
-  if (!target || !root.contains(target)) return;
-  const ds = target.dataset;
-  if (ds.action === "skip") {
+  if (!target) {
+    // Clique na linha ou no cartão, fora dos botões, abre a tela do documento ou do cliente.
+    const row = event.target.closest("[data-href]");
+    if (row && !getSelection()?.toString()) navigate(row.dataset.href);
+    return;
+  }
+  const ds = target.dataset,
+    popover = target.closest("[popover]");
+  if (target.tagName === "A") {
+    if (ds.action === "skip") {
+      event.preventDefault();
+      $("#conteudo")?.focus();
+      return;
+    }
+    const href = target.getAttribute("href") || "";
+    // Ctrl/Cmd + clique e botão do meio continuam abrindo em nova aba.
+    if (!href.startsWith("#/") || event.ctrlKey || event.metaKey || event.shiftKey || event.altKey || event.button !== 0) return;
     event.preventDefault();
-    $("#conteudo")?.focus();
+    if (popover?.matches(":popover-open")) popover.hidePopover();
+    navigate(href);
     return;
   }
+  if (ds.menu) return prepareRowMenu(target, event);
+  if (popover?.matches(":popover-open") && !target.hasAttribute("popovertarget")) popover.hidePopover();
+  const id = Number;
   if (ds.action === "logout") return logout();
-  if (ds.action === "clear-filters") {
-    search = "";
-    filter = "all";
-    if ($("#search")) $("#search").value = "";
-    if ($("#statusfilter")) $("#statusfilter").value = "all";
-    refreshList();
-    $("#search")?.focus();
-    return;
-  }
-  if (ds.page) return navigate(ds.page);
+  if (ds.action === "clear-filters") return clearFilters();
+  if (ds.filter) return setFilter(ds.filter);
   if (ds.new)
-    return ds.new === "client" ? editClient() : ds.new === "package" ? editPackage() : editDoc(ds.new);
+    return ds.new === "client" ? editClient() : ds.new === "package" ? editPackage() : ds.new === "quote" ? openPicker() : editDoc(ds.new);
+  if (ds.newFor) return openPicker({ clientId: ds.newFor });
   if (ds.quoteTemplate) return editDoc("quote", { templateId: ds.quoteTemplate });
-  if (ds.editClient) return editClient(state.clients.find((c) => c.id === Number(ds.editClient)));
-  if (ds.editPackage) return editPackage(state.packages.find((p) => p.id === Number(ds.editPackage)));
-  if (ds.editDoc) {
-    const doc = findDoc(ds.editDoc);
-    if (doc) editDoc(doc.type, doc);
-    return;
-  }
-  if (ds.previewPdf) {
-    window.open(`/api/documents/${ds.previewPdf}/pdf?inline=1`, "_blank", "noopener,noreferrer");
-    return;
-  }
-  if (ds.pdf) {
-    const link = document.createElement("a");
-    link.href = `/api/documents/${ds.pdf}/pdf`;
-    link.download = "";
-    link.click();
-    return;
-  }
-  if (ds.convert) return convertQuote(Number(ds.convert), target);
+  if (ds.editClient) return findClient(ds.editClient) && editClient(findClient(ds.editClient));
+  if (ds.deleteClient) return deleteClient(id(ds.deleteClient));
+  if (ds.editPackage) return editPackage(state.packages.find((p) => p.id === id(ds.editPackage)));
+  if (ds.deletePackage) return deletePackage(id(ds.deletePackage));
+  if (ds.editDoc) return findDoc(ds.editDoc) && editDoc(findDoc(ds.editDoc).type, findDoc(ds.editDoc));
+  if (ds.previewPdf) return void window.open(`/api/documents/${ds.previewPdf}/pdf?inline=1`, "_blank", "noopener,noreferrer");
+  if (ds.pdf) return downloadPdf(ds.pdf);
+  if (ds.convert) return convertQuote(id(ds.convert), target);
+  if (ds.send) return sendDialog(id(ds.send));
+  if (ds.duplicate) return duplicateDoc(id(ds.duplicate));
+  if (ds.archive) return archiveDoc(id(ds.archive));
+  if (ds.restore) return restoreDoc(id(ds.restore));
+  if (ds.delete) return deleteDoc(id(ds.delete));
 }
-root.addEventListener("click", onRootClick);
+document.addEventListener("click", onClick);
 root.addEventListener("input", (event) => {
   if (event.target.id !== "search") return;
-  search = event.target.value;
+  route.search = event.target.value;
   refreshList();
 });
 root.addEventListener("change", (event) => {
-  if (event.target.id !== "statusfilter") return;
-  filter = event.target.value;
+  if (event.target.id !== "sort") return;
+  route.sort = event.target.value;
   refreshList();
 });
+function setFilter(tab) {
+  route.filter = tab;
+  refreshList();
+  $(`.status-tab[data-filter="${tab}"]`)?.focus();
+}
+function clearFilters() {
+  route.search = "";
+  route.filter = "all";
+  if ($("#search")) $("#search").value = "";
+  refreshList();
+  $("#search")?.focus();
+}
+function downloadPdf(id) {
+  const link = document.createElement("a");
+  link.href = `/api/documents/${id}/pdf`;
+  link.download = "";
+  link.click();
+}
 // Máscaras: filtram o que é digitado e formatam ao sair do campo.
 document.addEventListener(
   "input",
@@ -1474,8 +2190,16 @@ document.addEventListener("click", (event) => {
   toggle.innerHTML = `${show ? "Ocultar" : "Mostrar"}<span class="sr-only"> senha</span>`;
 });
 $("#alert-close").onclick = closeAlert;
+// O aviso com "Desfazer" não some enquanto o mouse ou o foco estiverem nele.
+const toastBox = $("#toast");
+toastBox.addEventListener("mouseenter", () => clearTimeout(toastTimer));
+toastBox.addEventListener("focusin", () => clearTimeout(toastTimer));
+toastBox.addEventListener("mouseleave", () => toastBox.classList.contains("show") && startToastTimer());
+toastBox.addEventListener("focusout", (event) => {
+  if (!toastBox.contains(event.relatedTarget) && toastBox.classList.contains("show")) startToastTimer();
+});
 window.addEventListener("beforeunload", (event) => {
-  if ((modal.open && activeForm?.isDirty()) || pageGuard?.()) {
+  if ([...forms.values()].some((ctrl) => ctrl.dialog.open && ctrl.isDirty()) || pageGuard?.()) {
     event.preventDefault();
     event.returnValue = "";
   }

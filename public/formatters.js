@@ -88,6 +88,22 @@ export function maskPhone(value) {
   );
 }
 
+/**
+ * Número no formato do link do WhatsApp (só dígitos, com DDI).
+ * "(47) 99999-0000" → "5547999990000"; "+351 912 345 678" → "351912345678".
+ * Retorna "" quando não dá para montar um número válido.
+ */
+export function whatsappNumber(value) {
+  const raw = String(value ?? "").trim();
+  if (!raw) return "";
+  let digits = raw.replace(/\D/g, "");
+  if (raw.startsWith("+")) return digits.length >= 8 && digits.length <= 15 ? digits : "";
+  digits = digits.replace(/^0+/, "");
+  if (digits.length === 10 || digits.length === 11) return `55${digits}`;
+  if ((digits.length === 12 || digits.length === 13) && digits.startsWith("55")) return digits;
+  return "";
+}
+
 /** Soma dias a uma data AAAA-MM-DD, sem efeito de fuso horário. */
 export function addDays(isoDate, days) {
   if (!ISO_DATE.test(isoDate || "")) return "";

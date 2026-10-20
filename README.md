@@ -41,9 +41,15 @@ Os checksums oficiais são publicados em [SHASUMS256.txt](https://nodejs.org/dis
 
 1. Cadastre sua conta e revise os dados da empresa em **Configurações**.
 2. Cadastre clientes e pacotes com equipamentos e preços.
-3. Crie um orçamento com evento, horários, validade e parcelas. A validade sugerida é de 15 dias, ajustável em **Configurações**; depois dessa data, o orçamento aparece como **Vencido**.
+3. Em **Novo orçamento**, escolha um modelo pronto ou comece em branco e preencha evento, horários, validade e parcelas. A validade sugerida é de 15 dias, ajustável em **Configurações**; depois dessa data, o orçamento aparece como **Vencido**.
 4. Baixe o PDF ou gere o contrato. O contrato gerado abre para revisão, e o orçamento passa a aparecer como **Convertido**, com o atalho **Ver contrato**.
 5. Revise as cláusulas, autorização de imagem e condições, e emita o PDF do contrato.
+
+Cada tela tem endereço próprio (por exemplo, `#/orcamentos?situacao=enviados` ou `#/contratos/12`): o botão Voltar do navegador, o F5 e os links salvos abrem a mesma tela. Nas listas, as abas filtram por situação (com a contagem de cada uma), e é possível buscar por cliente, evento ou número e ordenar pela data do evento ou pelo valor. Clique em um documento para ver o resumo, o histórico e todas as ações. Cada linha mostra a ação mais provável (por exemplo, **Enviar** em rascunhos ou **Gerar contrato** em orçamentos enviados). As demais ações ficam no menu **⋯**: duplicar, arquivar e, para arquivados, restaurar ou excluir definitivamente. Arquivar oferece **Desfazer**; excluir pede confirmação.
+
+**Enviar pelo WhatsApp** abre a conversa com o cliente e uma mensagem pronta, editável. O PDF vai como anexo: baixe-o pelo próprio aviso ou, em aparelhos compatíveis, use **Compartilhar PDF**. Ao enviar, o rascunho passa a **Enviado** e a data fica no histórico. No campo **Cliente**, busque pelo nome ou cadastre um cliente novo sem sair do orçamento. No celular, as listas aparecem em cartões e a navegação fica na barra inferior.
+
+Excluir um cliente ou um pacote também pede confirmação e não altera documentos já emitidos, que guardam os dados da emissão.
 
 Os formulários avisam antes de descartar alterações. O formulário de orçamento e contrato guarda um rascunho neste navegador: se a janela fechar sem salvar, o sistema oferece restaurar as alterações. Se a sessão expirar durante a edição, o sistema pede a senha de novo e conclui o salvamento.
 
@@ -72,7 +78,7 @@ O teste de integração usa banco temporário e verifica cadastro/login, isolame
 
 O módulo **Orçamentos** inclui os modelos **Lagoa Vila Serena**, **Castelli Mondini** e **Gottesgabe Eventos**, com a identidade visual, logo e imagem ilustrativa dos exemplos enviados. Os modelos ficam disponíveis também para contas já existentes, sem recriar usuários ou substituir cadastros.
 
-Clique em **Usar modelo**, selecione o cliente e preencha a data do novo evento. O botão **Novo orçamento** começa sem modelo e sem cliente selecionado; para aplicar um modelo, use **Usar modelo** ou o campo **Modelo visual**. O local, os serviços, os equipamentos e os preços de referência são preenchidos e continuam editáveis antes da emissão. O modelo Castelli inclui opções de pacote completo, iluminação, somente DJ e cerimônia externa. Os exemplos não especificam equipamentos do kit de cerimônia ou da opção de iluminação: confirme a composição ao negociar.
+Em **Novo orçamento**, escolha o modelo (ou **Começar em branco**), selecione o cliente e preencha a data do novo evento. Nada vem pré-selecionado: o modelo também pode ser trocado depois, no campo **Modelo visual**. O local, os serviços, os equipamentos e os preços de referência são preenchidos e continuam editáveis antes da emissão. O modelo Castelli inclui opções de pacote completo, iluminação, somente DJ e cerimônia externa. Os exemplos não especificam equipamentos do kit de cerimônia ou da opção de iluminação: confirme a composição ao negociar.
 
 Os valores à vista e parcelado são separados. A condição escolhida define o total do orçamento e do contrato resultante; as demais ofertas são alternativas, não valores somados. Somente o pacote completo tem referência de até 10 parcelas no cartão. A data de quitação de boleto é calculada para 10 dias antes do evento. O PDF diferencia proposta comercial de contrato e não inclui assinatura ou cláusulas contratuais no orçamento. O orçamento não mostra CPF/CNPJ nem endereço do cliente e traz as instruções para contratar com o WhatsApp e a chave Pix de **Configurações**. A situação interna (rascunho, enviado, aprovado) não aparece nos PDFs; o contrato só sinaliza rascunho e cancelamento.
 
