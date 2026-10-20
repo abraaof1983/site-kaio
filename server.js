@@ -6,6 +6,7 @@ import { join } from "node:path";
 import PDFDocument from "pdfkit";
 import { APP_NAME, APP_VERSION, dataDir, ensureDir, packaged, readAsset } from "./app-env.js";
 import { serveAssets } from "./static-assets.js";
+import { CATEGORY_IDS, equipmentText } from "./public/catalog.js";
 import { QUOTE_TEMPLATES, getQuoteTemplate } from "./public/quote-templates.js";
 import { renderQuotePdf } from "./quote-pdf.js";
 import { renderContractPdf } from "./contract-pdf.js";
@@ -106,12 +107,38 @@ app.post("/api/register", (req, res) => {
     ).lastInsertRowid,
   );
   put(uid, "settings", defaultSettings);
+  // Catálogo inicial já separado pelos quadros do contrato, para o primeiro
+  // pacote sair montado a partir de produtos em vez de texto solto.
+  const catalogue = [
+    { name: "Caixa de som", category: "sound", qty: 2 },
+    { name: "Caixa de grave", category: "sound", qty: 2 },
+    { name: "Microfone sem fio", category: "sound", qty: 2 },
+    { name: "Notebook DJ", category: "dj", qty: 2 },
+    { name: "Controladora DJ", category: "dj", qty: 1 },
+    { name: "Mixer de 2 canais", category: "dj", qty: 1 },
+    { name: "Moving head", category: "light", qty: 4 },
+    { name: "Máquina de fumaça", category: "light", qty: 1 },
+    { name: "Torre de treliça", category: "light", qty: 2 },
+    { name: "Mesa de som da cerimônia", category: "ceremony", qty: 1 },
+    { name: "Caixa de som da cerimônia", category: "ceremony", qty: 2 },
+    { name: "Luz cênica para ambientação", category: "scenic", qty: 8 },
+    { name: "Transporte e montagem", category: "other", qty: 1 },
+  ].map(({ name, category, qty }) => ({
+    productId: put(uid, "products", { name, category, price: 0 }),
+    name,
+    category,
+    qty,
+    price: 0,
+  }));
+  // Cerimônia e cênicas ficam no catálogo para serem acrescentadas quando houver.
+  const items = catalogue.filter((item) => !["ceremony", "scenic"].includes(item.category));
   put(uid, "packages", {
     name: "Pacote 2 · Som & Luz",
     price: 2700,
     description: "DJ, sonorização e iluminação para sua festa",
-    equipment:
-      "2 caixas de som\n2 caixas de grave\n2 microfones sem fio\n2 notebooks DJ\n1 controladora DJ\n1 mixer de 2 canais\n4 moving heads\n1 máquina de fumaça\n2 torres de treliça\nTransporte e montagem",
+    items,
+    equipmentExtra: "",
+    equipment: equipmentText(items),
   });
   login(uid, res);
 });
@@ -192,6 +219,7 @@ app.post("/api/logout", (req, res) => {
 app.get("/api/data", (req, res) => {
   const result = {
     clients: [],
+    products: [],
     packages: [],
     documents: [],
     settings: defaultSettings,
@@ -208,13 +236,40 @@ app.get("/api/data", (req, res) => {
 });
 function validate(kind, b) {
   if (!b || typeof b !== "object") return "Dados inválidos.";
-  if (["clients", "packages"].includes(kind) && !b.name?.trim())
+  if (["clients", "packages", "products"].includes(kind) && !b.name?.trim())
     return "Nome obrigatório.";
   if (
     kind === "packages" &&
     (!Number.isFinite(Number(b.price)) || Number(b.price) < 0)
   )
     return "Preço inválido.";
+  if (kind === "products") {
+    if (!CATEGORY_IDS.includes(b.category))
+      return "Selecione em qual quadro do contrato o produto aparece.";
+    if (
+      b.price != null &&
+      b.price !== "" &&
+      (!Number.isFinite(Number(b.price)) || Number(b.price) < 0)
+    )
+      return "Valor de referência inválido.";
+  }
+  // Itens escolhidos do catálogo, em pacotes e documentos. O nome e a categoria
+  // ficam gravados junto: o documento não deve mudar se o produto for editado depois.
+  if (["packages", "documents"].includes(kind) && b.items != null) {
+    if (!Array.isArray(b.items)) return "Itens inválidos.";
+    if (b.items.length > 200) return "Limite de 200 itens.";
+    for (const item of b.items) {
+      if (!String(item?.name || "").trim()) return "Todo item precisa de um nome.";
+      if (!CATEGORY_IDS.includes(item.category))
+        return "Todo item precisa de um quadro válido do contrato.";
+      if (
+        !Number.isInteger(Number(item.qty)) ||
+        Number(item.qty) < 1 ||
+        Number(item.qty) > 999
+      )
+        return "Quantidade de item inválida.";
+    }
+  }
   if (
     kind === "settings" &&
     b.quoteValidityDays != null &&
@@ -288,7 +343,7 @@ function validate(kind, b) {
 }
 app.post("/api/records/:kind", (req, res) => {
   const kind = req.params.kind;
-  if (!["clients", "packages", "documents", "settings"].includes(kind))
+  if (!["clients", "products", "packages", "documents", "settings"].includes(kind))
     return res.sendStatus(404);
   const b = req.body;
   const error = validate(kind, b);
@@ -482,7 +537,7 @@ app.post("/api/documents/:id/sent", (req, res) => {
 // Clientes e pacotes: os documentos guardam os dados da emissão, então excluir
 // o cadastro não altera documentos já emitidos.
 app.delete("/api/records/:kind/:id", (req, res) => {
-  if (!["clients", "packages"].includes(req.params.kind))
+  if (!["clients", "products", "packages"].includes(req.params.kind))
     return res.sendStatus(404);
   const result = stmt(
     "DELETE FROM records WHERE id=? AND user_id=? AND kind=?",

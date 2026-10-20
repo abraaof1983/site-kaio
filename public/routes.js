@@ -10,6 +10,7 @@ export const PAGE_SLUGS = {
   quotes: "orcamentos",
   contracts: "contratos",
   clients: "clientes",
+  products: "produtos",
   packages: "pacotes",
   settings: "configuracoes",
 };
