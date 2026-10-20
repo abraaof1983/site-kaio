@@ -856,6 +856,35 @@ textarea:disabled {
   border-radius: 6px;
   color: #5f5338;
 }
+/* Ficha do evento no contrato: campos opcionais recolhidos */
+.more-fields {
+  border: 1px solid var(--line-soft);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.more-fields > summary {
+  display: list-item;
+  min-height: var(--target);
+  padding: 12px 14px;
+  font-size: var(--fs-sm);
+  font-weight: 600;
+  color: var(--text);
+  cursor: pointer;
+}
+.more-fields > summary:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 2px;
+  border-radius: 8px;
+}
+.more-fields[open] > summary {
+  border-bottom: 1px solid var(--line-soft);
+}
+.more-fields > .hint {
+  padding: 12px 14px 0;
+}
+.more-fields > .form-grid {
+  padding: 14px;
+}
 .quote-template-fields {
   display: contents;
 }
