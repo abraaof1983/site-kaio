@@ -140,7 +140,12 @@ export class DesktopLifetime {
       this.hadRemoteWindow &&
       this.remoteLostSince !== null &&
       this.processExited &&
-      now - this.remoteLostSince >= this.closeGraceMs
+      now - this.remoteLostSince >= this.closeGraceMs &&
+      ![...this.clients.values()].some(
+        (client) =>
+          client.closing === null &&
+          now - client.seen < this.heartbeatTimeoutMs,
+      )
     )
       return this.finish("browser-closed");
     if (

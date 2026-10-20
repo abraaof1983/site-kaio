@@ -2,6 +2,7 @@ import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
 import {
   existsSync,
+  appendFileSync,
   mkdtempSync,
   readFileSync,
   realpathSync,
@@ -819,5 +820,32 @@ try {
   console.log(
     `\n${results.length - failed}/${results.length} verificações passaram`,
   );
+  if (process.env.GITHUB_STEP_SUMMARY) {
+    const closedWindow = results.find(
+      (r) =>
+        r.name === "fechar a janela encerra o EXE e libera a porta em até 15s",
+    );
+    const gui = results.find(
+      (r) => r.name === "executável usa subsistema gráfico, sem janela CMD",
+    );
+    const summary = [
+      "## Verificação nativa do AOF Studio",
+      "",
+      `**${results.length - failed}/${results.length} verificações passaram.**`,
+      "",
+      `- Executável sem CMD: ${gui?.ok ? "confirmado pelo cabeçalho Windows GUI" : "não confirmado"}.`,
+      `- Fechar a janela encerra processo e porta: ${closedWindow ? (closedWindow.ok ? "confirmado no Windows com navegador real" : "falhou") : "não executado; consulte os logs (navegador ausente ou falha anterior)"}.`,
+      "",
+      ...results.map((r) => `- ${r.ok ? "✅" : "❌"} ${r.name}`),
+      "",
+    ].join("\n");
+    try {
+      appendFileSync(process.env.GITHUB_STEP_SUMMARY, summary);
+    } catch (error) {
+      console.warn(
+        `Não foi possível salvar o resumo da verificação: ${error.message}`,
+      );
+    }
+  }
   if (failed) process.exitCode = 1;
 }

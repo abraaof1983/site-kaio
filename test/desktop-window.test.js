@@ -163,3 +163,19 @@ test("shutdown only accepts the matching loopback browser endpoint from its own 
     null,
   );
 });
+
+test("a live page survives lost browser monitoring after an early launcher exit", () => {
+  const c = clock();
+  c.lifecycle.processExited = true;
+  c.lifecycle.observeWindows(1);
+  c.lifecycle.heartbeat(id);
+  c.lifecycle.connectionLost();
+  c.advance(5000);
+  assert.deepEqual(c.closed, []);
+  c.lifecycle.heartbeat(id);
+  c.advance(5000);
+  assert.deepEqual(c.closed, []);
+  c.lifecycle.closing(id);
+  c.advance(3501);
+  assert.equal(c.closed.length, 1);
+});
