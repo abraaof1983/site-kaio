@@ -47,7 +47,20 @@ npm run verify:exe
 
 A saída fica em `dist/`: a pasta `AOF Studio` com o programa, o `Instalar.cmd` e o `LEIA-ME.txt`, mais o zip de entrega. O executável tem cerca de 97 MB porque leva dentro o runtime do Node, as fontes, as telas e as imagens — é isso que dispensa instalar o Node na máquina de destino.
 
-`npm run verify:exe` exercita o executável compilado: comandos, banco na pasta do usuário, PDFs com as fontes embutidas, telas servidas de dentro do arquivo, escuta restrita a 127.0.0.1, instalação e desinstalação por usuário e importação de dados. Vale rodar sempre que mexer em leitura de arquivos, porque esse tipo de erro só aparece fora da pasta do projeto.
+`npm run verify:exe` exercita o executável compilado: comandos, banco na pasta do usuário, PDFs com as fontes embutidas, telas servidas de dentro do arquivo, escuta restrita a 127.0.0.1, instalação e desinstalação por usuário e importação de dados. Vale rodar sempre que mexer em leitura de arquivos, porque esse tipo de erro só aparece fora da pasta do projeto. Com o AOF Studio já instalado nesta máquina, a parte de instalação é pulada, para a verificação não mexer nos seus atalhos.
+
+### Publicar uma versão
+
+O executável não entra no histórico do git: tem ~97 MB, e o GitHub bloqueia arquivos acima de 100 MiB. Ele é publicado como anexo de um release, que fica fora do histórico.
+
+Atualize a versão no `package.json` e envie uma tag igual:
+
+```sh
+git tag v1.1.0
+git push origin v1.1.0
+```
+
+O workflow **Release do Windows** compila num Windows limpo, roda `npm test` e `npm run verify:exe` e anexa o zip e o `.exe` ao release. Se a tag não corresponder à versão do `package.json`, ele para antes de publicar. O texto do release vem de `.github/release-notes.md`. Para só compilar e conferir sem publicar, use **Run workflow** na aba Actions: os arquivos ficam como artefato da execução por 14 dias.
 
 O ícone é versionado em `assets/aof-studio.ico`. Para regerá-lo a partir do logo: `node build/make-icon.mjs`.
 
