@@ -195,6 +195,7 @@ try {
   for (const [path, type] of [
     ["/app.js", "javascript"], ["/style.css", "text/css"], ["/formatters.js", "javascript"],
     ["/routes.js", "javascript"], ["/documents.js", "javascript"], ["/quote-templates.js", "javascript"],
+    ["/catalog.js", "javascript"],
     ["/quote-assets/logo-contrato.jpg", "image/jpeg"], ["/quote-assets/logo-aof.jpg", "image/jpeg"],
     ["/quote-assets/estrutura.png", "image/png"],
   ]) {
