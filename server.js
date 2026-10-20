@@ -6,6 +6,7 @@ import { spawn } from "node:child_process";
 import PDFDocument from "pdfkit";
 import { QUOTE_TEMPLATES, getQuoteTemplate } from "./public/quote-templates.js";
 import { renderQuotePdf } from "./quote-pdf.js";
+import { renderContractPdf } from "./contract-pdf.js";
 const app = express();
 app.disable("x-powered-by");
 app.use(express.json({ limit: "1mb" }));
@@ -486,11 +487,6 @@ app.delete("/api/records/:kind/:id", (req, res) => {
   if (!result.changes) return res.sendStatus(404);
   res.json({ ok: true });
 });
-const money = (n) =>
-  Number(n || 0).toLocaleString("pt-BR", {
-    style: "currency",
-    currency: "BRL",
-  });
 app.get("/api/documents/:id/pdf", (req, res) => {
   const r = get(
     "SELECT body FROM records WHERE id=? AND user_id=? AND kind='documents'",
@@ -527,114 +523,7 @@ app.get("/api/documents/:id/pdf", (req, res) => {
     doc.end();
     return;
   }
-  const text = (s, size = 10) =>
-    doc
-      .font("Body")
-      .fontSize(size)
-      .fillColor("#334155")
-      .text(String(s || "—"), { lineGap: 4 });
-  const title = (s) => {
-    if (doc.y > 680) doc.addPage();
-    doc.moveDown();
-    doc.font("Heading").fontSize(12).fillColor("#087f72").text(s);
-    doc.moveDown(0.4);
-  };
-  doc.font("Heading").fontSize(25).fillColor("#0e2928").text(c.company);
-  text(c.representative);
-  text(`CNPJ ${c.cnpj} | ${c.email}`);
-  text(`${c.address || ""}${c.phone ? " | " + c.phone : ""}`);
-  doc.moveDown();
-  doc
-    .font("Heading")
-    .fontSize(22)
-    .fillColor("#0e2928")
-    .text(
-      b.type === "contract"
-        ? "Contrato de prestação de serviços"
-        : "Proposta comercial",
-    );
-  // Situações internas (enviado, aprovado, assinado) não aparecem no documento do cliente;
-  // ficam só os avisos que afetam a validade do documento: rascunho e cancelado.
-  const documentWarning = {
-    draft: "RASCUNHO — REVISAR ANTES DE ASSINAR",
-    cancelled: "CANCELADO",
-  }[b.status];
-  text(
-    `${b.number} • Emissão: ${new Date(b.createdAt).toLocaleDateString("pt-BR")}${documentWarning ? ` • ${documentWarning}` : ""}`,
-  );
-  title("01 / Cliente e evento");
-  text(`${b.client.name} | CPF/CNPJ: ${b.client.document || "Não informado"}`);
-  text(`${b.client.email || ""} | ${b.client.phone || ""}`);
-  text(b.client.address);
-  text(
-    `${b.event} • ${b.date.split("-").reverse().join("/")} • ${b.guests || "—"} convidados`,
-  );
-  text(`Local: ${b.venue || "A definir"}`);
-  text(
-    `Montagem: ${b.setup || "A definir"} | Cerimônia: ${b.ceremony || "A definir"} | Início: ${b.start || "A definir"} | Término: ${b.end || "A definir"}`,
-  );
-  title("02 / Serviços e equipamentos");
-  text(b.packageName);
-  text(b.equipment);
-  title("03 / Investimento e pagamento");
-  doc.font("Heading").fontSize(22).fillColor("#087f72").text(money(b.total));
-  if (b.templateId && b.paymentChoice) {
-    text(
-      `Condição escolhida: ${b.paymentChoice === "installments" ? "parcelado" : "à vista"}.`,
-    );
-    if (b.paymentChoice === "installments" && b.cardTerms) text(b.cardTerms);
-  }
-  text(`Hora adicional: ${money(b.extraHour)} | PIX: ${c.pix || "A combinar"}`);
-  for (const [i, p] of b.payments.entries())
-    text(
-      `${i + 1}ª parcela • ${p.date.split("-").reverse().join("/")} • ${money(p.amount)}`,
-    );
-  text(b.paymentNotes || "Condições a combinar entre as partes.");
-  if (b.type === "quote")
-    text(
-      `Proposta válida até: ${(b.validUntil || "").split("-").reverse().join("/") || "A combinar"}. Reserva de data mediante formalização contratual.`,
-    );
-  if (b.type === "contract") {
-    title("04 / Cláusulas contratuais");
-    text(b.clauses);
-    title("05 / Autorização de imagem");
-    text(
-      b.imageConsent
-        ? "O contratante autoriza o uso de imagem do evento nos canais de divulgação da contratada."
-        : "Não há autorização de uso de imagem neste instrumento.",
-    );
-  }
-  if (b.notes) {
-    title("Observações");
-    text(b.notes);
-  }
-  if (doc.y > 650) doc.addPage();
-  doc.moveDown(3);
-  text(
-    "__________________________________      __________________________________",
-  );
-  text(
-    `${c.representative}                                      ${b.client.name}`,
-  );
-  text(
-    "Contratada                                                        Contratante",
-  );
-  text(
-    "Assinaturas a serem coletadas pelas partes. Este documento não contém assinatura digital.",
-  );
-  const range = doc.bufferedPageRange();
-  for (let i = 0; i < range.count; i++) {
-    doc.switchToPage(i);
-    doc
-      .fontSize(8)
-      .fillColor("#64748b")
-      .text(
-        `${c.company} • ${b.number}                                                  ${i + 1} / ${range.count}`,
-        48,
-        790,
-        { lineBreak: false },
-      );
-  }
+  renderContractPdf(doc, b, c);
   doc.end();
 });
 app.use(express.static("public"));
