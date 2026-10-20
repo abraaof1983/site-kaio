@@ -89,8 +89,25 @@ npm start</pre>
         >
       </main>
     </div>
-    <div id="toast" role="status"></div>
+    <div id="toast" class="toast" role="status" aria-live="polite"></div>
+    <div id="alert-wrap" class="toast toast-error">
+      <p id="alert" role="alert"></p>
+      <button
+        type="button"
+        id="alert-close"
+        class="toast-close"
+        aria-label="Fechar aviso"
+        hidden
+      >
+        ×
+      </button>
+    </div>
     <dialog id="modal"></dialog>
+    <dialog
+      id="reauth"
+      class="dialog-small"
+      aria-labelledby="reauth-title"
+    ></dialog>
     <script>
       if (location.protocol !== "file:") {
         document.getElementById("startup-title").textContent =

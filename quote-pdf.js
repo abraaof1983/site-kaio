@@ -27,14 +27,6 @@ const date = (value) => {
   const match = String(value || "").match(/^(\d{4})-(\d{2})-(\d{2})/);
   return match ? `${match[3]}/${match[2]}/${match[1]}` : "A combinar";
 };
-const statusName = (status) =>
-  ({
-    draft: "Rascunho",
-    sent: "Enviado",
-    approved: "Aprovado",
-    signed: "Assinatura informada",
-    cancelled: "Cancelado",
-  })[status] || "Rascunho";
 const normalized = (value) =>
   String(value || "")
     .replace(/\s+/g, " ")
@@ -191,11 +183,8 @@ export function renderQuotePdf(doc, b, company, template = null) {
       headerBottom += 11;
     }
     headerBottom = Math.max(top + (showLogo ? 46 : 0), headerBottom);
-    const meta = [
-      b.number,
-      `Emissão: ${date(b.createdAt)}`,
-      statusName(b.status),
-    ]
+    // A situação (rascunho, enviado…) é interna: não vai para o documento do cliente.
+    const meta = [b.number, `Emissão: ${date(b.createdAt)}`]
       .filter(Boolean)
       .join("   •   ");
     const metaLines = wrap(meta, width, 7.1);
@@ -382,18 +371,26 @@ export function renderQuotePdf(doc, b, company, template = null) {
       });
     }
   }
+  // Na proposta bastam os contatos; CPF/CNPJ e endereço ficam só no contrato
+  // (princípio da necessidade da LGPD).
   function contactDetails() {
     const client = b.client || {};
-    const identity = [
-      client.document && `CPF/CNPJ: ${client.document}`,
-      client.email,
-      client.phone,
+    const contact = [client.email, client.phone].filter(Boolean).join("  •  ");
+    if (contact) text(contact, { size: 7.5, color: colors.muted, gap: 3 });
+  }
+  function howToBook() {
+    const channel = c.phone
+      ? `pelo WhatsApp ${c.phone}`
+      : c.email
+        ? `pelo e-mail ${c.email}`
+        : "";
+    return [
+      channel &&
+        `Como contratar: confirme ${channel} e enviaremos o contrato para assinatura.`,
+      c.pix && `Pix para pagamento: ${c.pix}.`,
     ]
       .filter(Boolean)
-      .join("  •  ");
-    if (identity) text(identity, { size: 7.5, color: colors.muted, gap: 2 });
-    if (client.address)
-      text(client.address, { size: 7.5, color: colors.muted, gap: 3 });
+      .join(" ");
   }
   function conditions() {
     ensure(43);
@@ -433,7 +430,6 @@ export function renderQuotePdf(doc, b, company, template = null) {
       text(b.paymentNotes, { size: 8.1, color: colors.muted, gap: 5 });
     if (amount(b.extraHour) && Number(b.extraHour) > 0)
       text(`Hora adicional: ${money(b.extraHour)}.`, { size: 8.1, gap: 5 });
-    if (!model && c.pix) text(`PIX: ${c.pix}`, { size: 8.1, gap: 5 });
     if (b.validUntil)
       text(`Proposta válida até ${date(b.validUntil)}.`, {
         size: 8.1,
@@ -441,6 +437,8 @@ export function renderQuotePdf(doc, b, company, template = null) {
         color: colors.gold,
         gap: 5,
       });
+    const nextStep = howToBook();
+    if (nextStep) text(nextStep, { size: 8.4, bold: true, gap: 5 });
     text(
       model?.reservationNotes ||
         "Reserva de data mediante disponibilidade e formalização da contratação.",
