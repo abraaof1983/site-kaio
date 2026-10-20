@@ -29,7 +29,7 @@ Principais evidências, medidas em telas reais com dados fictícios:
 
 *Estimativas para uma pessoa desenvolvedora; refinar ao final da Fase 0.
 
-Andamento: a Fase 0 foi concluída. Veja a seção 11.
+Andamento: as Fases 0 e 1 foram concluídas. Veja a seção 11.
 
 ## 2. O que já funciona bem (manter)
 
@@ -311,7 +311,33 @@ Medições depois da Fase 0, com as mesmas telas e dados fictícios:
 | Erro na soma das parcelas | Só depois de enviar, no fim do formulário | No campo, antes de enviar, com resumo no topo |
 | Fonte dos campos no celular | 14 px (o iPhone dá zoom) | 16 px |
 
-Continuam para as próximas fases: o tamanho do formulário (3,5 telas; item 2.1), a lista abaixo da dobra em Orçamentos (1.2) e a tabela cortada no celular (1.6).
+### Fase 1 · implementada
+
+| # | Situação | Observação |
+|---|---|---|
+| 1.1 | Feito | Endereço por tela (`#/orcamentos?situacao=enviados&ordem=evento`, `#/orcamentos/12`, `#/clientes/7`). Voltar, Avançar e F5 funcionam, um link abre a tela certa (inclusive depois do login) e a lista volta na mesma posição de rolagem |
+| 1.2 | Feito | A galeria saiu da lista: "Novo orçamento" pergunta o modelo ou "Começar em branco". A galeria só aparece enquanto não há orçamentos |
+| 1.3 | Feito | Abas por situação com contagem, busca sem acento (cliente, evento, número e local) e ordenação. Coluna Nº em telas largas; a validade continua junto da situação, em vez de uma coluna própria |
+| 1.4 | Feito | Uma ação conforme o próximo passo (Enviar, Gerar contrato, Ver contrato, Editar, PDF ou Restaurar) e o menu "⋯". A linha abre a tela do documento, com resumo, histórico e todas as ações |
+| 1.5 | Feito | Arquivar com "Desfazer"; excluir definitivamente só depois de arquivar e com confirmação; duplicar abre um rascunho sem cliente, evento, data e parcelas. Clientes e pacotes também podem ser excluídos, com confirmação |
+| 1.6 | Feito | Cartões no celular, barra inferior (Início, Orçamentos, Novo, Contratos, Mais) e formulários em tela cheia |
+| 1.7 | Feito | Campo Cliente com busca (padrão combobox do WAI-ARIA) e cadastro por cima do formulário; tela do cliente com contato, resumo e documentos |
+| 1.8 | Feito | Mensagem pronta e editável, "Baixar PDF" e, quando o aparelho permite, "Compartilhar PDF". O envio fica no histórico e o rascunho passa a Enviado |
+
+No servidor, cada documento ganhou um histórico (criação, edição, mudança de situação, envio, conversão, arquivamento) e rotas para arquivar, restaurar, excluir e registrar o envio. A exclusão definitiva só aceita documentos arquivados.
+
+Medições depois da Fase 1, com as mesmas telas e dados fictícios (60 verificações automáticas no navegador, incluindo a regressão da Fase 0):
+
+| Métrica | Antes da Fase 0 | Depois da Fase 1 |
+|---|---|---|
+| Linhas visíveis da lista em 1366×768 (Orçamentos) | 0 | 5 |
+| Largura visível da lista no celular | 42% | 100%, em cartões |
+| Textos abaixo de 4,5:1 | 60 de 123 no painel | 0 nas 9 telas medidas |
+| Textos abaixo de 12 px | 56 de 123 no painel | 0 |
+| Alvos abaixo de 24 px | 2 | 0 |
+| Ações visíveis por linha | 4 botões | 1 ação + menu "⋯" |
+
+Continua para a Fase 2: o tamanho do formulário de orçamento (3,5 telas; item 2.1).
 
 ## Fontes
 
