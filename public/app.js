@@ -2369,11 +2369,12 @@ function onClick(event) {
   if (ds.action === "logout") return logout();
   if (ds.action === "clear-filters") return clearFilters();
   if (ds.filter) return setFilter(ds.filter);
-  if (ds.new)
+  if (ds.new) {
     if (ds.new === "client") return editClient();
     if (ds.new === "product") return editProduct();
     if (ds.new === "package") return editPackage();
     return ds.new === "quote" ? openPicker() : editDoc(ds.new);
+  }
   if (ds.newFor) return openPicker({ clientId: ds.newFor });
   if (ds.quoteTemplate) return editDoc("quote", { templateId: ds.quoteTemplate });
   if (ds.editClient) return findClient(ds.editClient) && editClient(findClient(ds.editClient));
