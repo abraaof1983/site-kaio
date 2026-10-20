@@ -79,15 +79,21 @@ if (
 step("Limpando a saída anterior");
 // O Windows costuma manter o executável preso por alguns instantes depois do uso
 // (antivírus, Explorer); por isso as tentativas repetidas.
-const clean = (path) =>
-  rmSync(path, {
-    recursive: true,
-    force: true,
-    maxRetries: 20,
-    retryDelay: 250,
-  });
+// Falhar a limpeza não deve derrubar uma publicação: tenta a pasta inteira,
+// depois item por item, e segue — os arquivos são sobrescritos de qualquer forma.
+const clean = (path) => {
+  try {
+    rmSync(path, { recursive: true, force: true, maxRetries: 40, retryDelay: 250 });
+    return true;
+  } catch {
+    return false;
+  }
+};
 clean(work);
-clean(dist);
+if (!clean(dist) && existsSync(dist)) {
+  const stuck = readdirSync(dist).filter((entry) => !clean(join(dist, entry)));
+  if (stuck.length) console.log(`presos pelo Windows, serão sobrescritos: ${stuck.join(", ")}`);
+}
 mkdirSync(work, { recursive: true });
 mkdirSync(stage, { recursive: true });
 
