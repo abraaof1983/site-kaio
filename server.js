@@ -21,6 +21,7 @@ import {
   showDesktopNotice,
 } from "./desktop-window.js";
 import { CATEGORY_IDS, equipmentText } from "./public/catalog.js";
+import { migratePackageCatalog, preparePackage } from "./package-catalog.js";
 import { QUOTE_TEMPLATES, getQuoteTemplate } from "./public/quote-templates.js";
 import { EVENT_TYPES, getEventType } from "./public/event-types.js";
 import { renderQuotePdf } from "./quote-pdf.js";
@@ -182,6 +183,7 @@ app.post("/api/register", (req, res) => {
     (item) => !["ceremony", "scenic"].includes(item.category),
   );
   put(uid, "packages", {
+    catalogVersion: 1,
     name: "Pacote 2 · Som & Luz",
     price: 2700,
     description: "DJ, sonorização e iluminação para sua festa",
@@ -285,6 +287,7 @@ app.post("/api/logout", (req, res) => {
   res.json({ ok: true });
 });
 app.get("/api/data", (req, res) => {
+  migratePackageCatalog(db, req.uid);
   const result = {
     clients: [],
     products: [],
@@ -330,14 +333,14 @@ function validate(kind, b) {
   // ficam gravados junto: o documento não deve mudar se o produto for editado depois.
   if (["packages", "documents"].includes(kind) && b.items != null) {
     if (!Array.isArray(b.items)) return "Itens inválidos.";
-    if (b.items.length > 200) return "Limite de 200 itens.";
+    if (kind === "documents" && b.items.length > 200) return "Limite de 200 itens.";
     for (const item of b.items) {
-      if (!String(item?.name || "").trim())
+      if (kind === "documents" && !String(item?.name || "").trim())
         return "Todo item precisa de um nome.";
-      if (!CATEGORY_IDS.includes(item.category))
+      if (kind === "documents" && !CATEGORY_IDS.includes(item.category))
         return "Todo item precisa de um quadro válido do contrato.";
       if (
-        !Number.isInteger(Number(item.qty)) ||
+        !Number.isInteger(Number(item?.qty)) ||
         Number(item.qty) < 1 ||
         Number(item.qty) > 999
       )
@@ -423,7 +426,7 @@ app.post("/api/records/:kind", (req, res) => {
     !["clients", "products", "packages", "documents", "settings"].includes(kind)
   )
     return res.sendStatus(404);
-  const b = req.body;
+  let b = req.body;
   const error = validate(kind, b);
   if (error) return res.status(400).json({ error });
   if (
@@ -441,6 +444,13 @@ app.post("/api/records/:kind", (req, res) => {
       kind,
     );
   if (b.id && !existing) return res.sendStatus(404);
+  if (kind === "packages") {
+    try {
+      b = preparePackage(db, req.uid, b, existing ? JSON.parse(existing.body) : null);
+    } catch (error) {
+      return res.status(400).json({ error: error.message });
+    }
+  }
   if (kind === "documents") {
     // Clientes antigos da API não devem apagar o tipo ao editar outro campo.
     // Documentos anteriores ao menu continuam sem classificação automática.

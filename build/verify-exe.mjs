@@ -497,6 +497,28 @@ try {
     "conta nova com pacote e cláusulas",
     data.packages.length === 1 && /MONTAGEM/.test(data.settings.clauses),
   );
+  const initialPackage = data.packages[0];
+  check(
+    "pacote padrão montado com produtos do catálogo",
+    initialPackage.catalogVersion === 1 &&
+      initialPackage.items.length > 0 &&
+      initialPackage.equipmentExtra === "" &&
+      initialPackage.items.every((item) =>
+        data.products.some((product) => product.id === item.productId),
+      ),
+  );
+  const productPackage = await api("/records/packages", {
+    name: "Pacote de verificação por produtos",
+    price: 800,
+    items: [{ productId: data.products[0].id, qty: 3 }],
+  });
+  check(
+    "montagem de pacote por produto funciona no executável",
+    productPackage.items[0].qty === 3 &&
+      productPackage.items[0].name === data.products[0].name &&
+      productPackage.equipment === `03 ${data.products[0].name}` &&
+      productPackage.price === 800,
+  );
   check(
     "modelos de orçamento embutidos",
     data.quoteTemplates.length >= 3,
