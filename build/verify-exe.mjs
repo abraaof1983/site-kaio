@@ -32,10 +32,19 @@ const results = [];
 const runningApps = [];
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const check = (name, ok, detail = "") => {
-  results.push({ name, ok: Boolean(ok) });
+  results.push({ name, ok: Boolean(ok), detail });
   console.log(
     `${ok ? "OK  " : "FALHOU"} ${name}${detail ? ` — ${detail}` : ""}`,
   );
+  // A mensagem fica na página da execução mesmo quando os logs exigem login.
+  // São somente resultados e caminhos temporários desta verificação isolada.
+  if (!ok && process.env.GITHUB_ACTIONS === "true") {
+    const message = `${name}${detail ? ` — ${detail}` : ""}`
+      .replaceAll("%", "%25")
+      .replaceAll("\r", "%0D")
+      .replaceAll("\n", "%0A");
+    console.log(`::error title=Verificação do executável::${message}`);
+  }
 };
 const kb = (bytes) => `${(bytes / 1024).toFixed(0)} KB`;
 
@@ -878,7 +887,7 @@ try {
       `- Executável sem CMD: ${gui?.ok ? "confirmado pelo cabeçalho Windows GUI" : "não confirmado"}.`,
       `- Fechar a janela encerra processo e porta: ${closedWindow ? (closedWindow.ok ? "confirmado no Windows com navegador real" : "falhou") : "não executado; consulte os logs (navegador ausente ou falha anterior)"}.`,
       "",
-      ...results.map((r) => `- ${r.ok ? "✅" : "❌"} ${r.name}`),
+      ...results.map((r) => `- ${r.ok ? "✅" : "❌"} ${r.name}${!r.ok && r.detail ? ` — ${r.detail}` : ""}`),
       "",
     ].join("\n");
     try {
