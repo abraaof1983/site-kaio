@@ -6,6 +6,13 @@
 
 O aplicativo abre uma janela própria do Edge ou Chrome, **sem CMD visível**. O servidor roda apenas enquanto a janela está aberta e é encerrado quando ela é fechada, com uma breve tolerância para recarregamento. O navegador pessoal do usuário não é encerrado. É necessário ter Edge ou Chrome disponível no computador.
 
+## Pacotes montados com produtos
+
+- Pacotes são compostos por produtos do catálogo e suas quantidades, com pelo menos um item.
+- **Cadastrar produto** permite criar e incluir um produto sem sair da montagem do pacote.
+- Pacotes antigos em texto, inclusive o pacote padrão, são convertidos para produtos preservando quantidades, preço e descrição.
+- A conversão reaproveita os produtos da conta, guarda o texto anterior e mantém os documentos já emitidos.
+
 ## Identidade visual
 
 - Ícone AOF atualizado com o arquivo original fornecido.

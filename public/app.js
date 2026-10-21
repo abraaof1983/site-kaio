@@ -1480,8 +1480,8 @@ function editClient(c = {}, onSaved, { notice = "", dialog = modal } = {}) {
     },
   );
 }
-function editProduct(p = {}) {
-  openModal(
+function editProduct(p = {}, { onSaved, dialog = modal } = {}) {
+  return openModal(
     p.id ? "Editar produto" : "Novo produto",
     field("Nome do produto", "name", p.name, "text", true, true, {
       hint: "Como deve sair impresso no contrato. Ex.: Moving head Beam 200.",
@@ -1506,7 +1506,7 @@ function editProduct(p = {}) {
         id: p.id,
         price: parseMoney(b.price) ?? 0,
       }),
-    { submitLabel: "Salvar produto" },
+    { submitLabel: "Salvar produto", onSaved, dialog },
   );
 }
 async function deleteProduct(id) {
@@ -1547,9 +1547,9 @@ function readItemRows(form) {
     };
   });
 }
-function itemsBlock(hint) {
+function itemsBlock(hint, { createProduct = false } = {}) {
   const empty = !state.products.length;
-  return `<div class="field full items" id="items-field"><span class="label" id="items-label">Itens do catálogo</span><p class="hint" id="items-hint">${hint}${empty ? " Nenhum produto cadastrado ainda: cadastre em <strong>Produtos</strong> para montar a lista por aqui." : ""}</p><div class="item-head" id="item-head" aria-hidden="true" hidden><span>Produto</span><span>Qtd.</span><span>Quadro no contrato</span><span></span></div><div id="items" role="group" aria-labelledby="items-label" aria-describedby="items-hint"></div><p class="items-sum" id="items-sum"></p><div class="item-actions"><button type="button" id="additem"${empty ? " disabled" : ""}><span aria-hidden="true">＋</span> Adicionar item</button></div></div>`;
+  return `<div class="field full items" id="items-field"><span class="label" id="items-label">Itens do catálogo</span><p class="hint" id="items-hint">${hint}${empty ? createProduct ? " Cadastre o primeiro produto pelo botão abaixo." : " Nenhum produto cadastrado ainda: cadastre em <strong>Produtos</strong> para montar a lista por aqui." : ""}</p><div class="item-head" id="item-head" aria-hidden="true" hidden><span>Produto</span><span>Qtd.</span><span>Quadro no contrato</span><span></span></div><div id="items" role="group" aria-labelledby="items-label" aria-describedby="items-hint"></div><p class="items-sum" id="items-sum"></p><div class="item-actions"><button type="button" id="additem"${empty ? " disabled" : ""}><span aria-hidden="true">＋</span> Adicionar item</button>${createProduct ? '<button type="button" id="create-package-product">Cadastrar produto</button>' : ""}</div></div>`;
 }
 function bindItems(ctrl, initial = []) {
   const form = ctrl.form,
@@ -1601,6 +1601,11 @@ function bindItems(ctrl, initial = []) {
       );
     });
     $("#item-head", form).hidden = !rows.length;
+    $("#additem", form).disabled = !state.products.length;
+    if (rows.length) {
+      clearError($("#additem", form));
+      clearError($("#create-package-product", form));
+    }
     const total = itemsTotal(read());
     $("#items-sum", form).textContent = rows.length
       ? total > 0
@@ -1645,20 +1650,15 @@ function bindItems(ctrl, initial = []) {
 }
 function editPackage(p = {}) {
   const items = p.items || [];
-  // Pacote antigo, só com a lista em texto: o texto vira o campo de itens soltos,
-  // para nada ser perdido ao passar a usar o catálogo.
-  const extra = p.equipmentExtra ?? (items.length ? "" : (p.equipment ?? ""));
   const ctrl = openModal(
     p.id ? "Editar pacote" : "Novo pacote",
     field("Nome do pacote", "name", p.name, "text", true) +
       moneyField("Preço", "price", p.price, true) +
       area("Descrição", "description", p.description) +
       itemsBlock(
-        "Monte o pacote com os produtos do catálogo. O quadro de cada item vem do cadastro do produto.",
-      ) +
-      area("Outros itens", "equipmentExtra", extra, true, {
-        hint: "Uma linha por item, para o que não está no catálogo. Ex.: Transporte e montagem.",
-      }),
+        "Escolha os produtos e as quantidades. O quadro de cada item vem do cadastro do produto. Serviços como transporte e montagem também podem ser cadastrados como produtos.",
+        { createProduct: true },
+      ),
     (b) => {
       const chosen = cleanItems(list.read());
       return api("/records/packages", {
@@ -1666,13 +1666,39 @@ function editPackage(p = {}) {
         id: p.id,
         price: parseMoney(b.price),
         items: chosen,
-        equipmentExtra: String(b.equipmentExtra || "").trim(),
-        equipment: equipmentText(chosen, b.equipmentExtra),
+        equipmentExtra: "",
+        equipment: equipmentText(chosen),
       });
     },
     { submitLabel: "Salvar pacote" },
   );
   const list = bindItems(ctrl, items);
+  ctrl.extraValidation = () =>
+    list.count()
+      ? []
+      : [{
+          el: $("#additem", ctrl.form).disabled
+            ? $("#create-package-product", ctrl.form)
+            : $("#additem", ctrl.form),
+          label: "Produtos do pacote",
+          message: "Adicione pelo menos um produto ao pacote.",
+        }];
+  $("#create-package-product", ctrl.form).onclick = () =>
+    editProduct({}, {
+      dialog: subdialog,
+      onSaved: (product) => {
+        const chosen = list.read();
+        list.fill([...chosen, {
+          productId: product.id,
+          name: product.name,
+          category: product.category,
+          price: product.price,
+          qty: 1,
+        }]);
+        ctrl.changed();
+        $$("[data-item-product]", ctrl.form).at(-1)?.focus();
+      },
+    });
   ctrl.markPristine();
 }
 // Sem clientes cadastrados, o próprio campo Cliente oferece o cadastro (sem sair do formulário).

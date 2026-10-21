@@ -164,7 +164,9 @@ Para conferir o executável compilado, `npm run verify:exe` (veja **Compilar o e
 
 Com isso a coluna deixa de ser adivinhada pelo nome do item. Uma "Luz âmbar para as mesas" cadastrada em **Cênicas** sai no quadro de cênicas, e não na iluminação de pista.
 
-Em **Pacotes e preços**, monte o pacote escolhendo produtos e quantidades. O preço do pacote continua sendo digitado por você; a soma dos valores de referência dos produtos aparece ao lado apenas para comparar.
+Em **Pacotes e preços**, monte o pacote escolhendo produtos e quantidades. É necessário incluir pelo menos um produto. Use **Cadastrar produto** dentro do pacote para acrescentar algo ao catálogo sem perder a montagem em andamento. Serviços como transporte e montagem também entram como produtos. O preço do pacote continua sendo digitado por você; a soma dos valores de referência dos produtos aparece ao lado apenas para comparar.
+
+Pacotes antigos que tinham a composição em texto, inclusive o **Pacote 2 · Som & Luz**, são convertidos para itens do catálogo ao abrir a conta na versão atualizada. A composição e as quantidades são preservadas, assim como o preço, a descrição e o cadastro do pacote. Produtos já cadastrados na mesma conta são reaproveitados quando correspondem ao item; os demais são cadastrados. O texto anterior fica guardado no banco para referência. A conversão não modifica orçamentos ou contratos já salvos.
 
 No orçamento e no contrato, os itens vêm do pacote escolhido e podem ser ajustados para aquele evento: é assim que você acrescenta as luzes cênicas ou o som da cerimônia a um contrato específico, e eles aparecem no quadro certo do PDF. O campo **Outros itens** aceita uma linha por item, para o que não está no catálogo.
 
