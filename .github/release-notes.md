@@ -29,6 +29,7 @@ O aplicativo abre uma janela própria do Edge ou Chrome, **sem CMD visível**. O
 
 ## Correções
 
+- Nova publicação dos pacotes montados com produtos. A tentativa `v1.2.1` não gerou uma release; esta versão inclui os diagnósticos de verificação Windows integrados pelo PR #14.
 - Ações de editar, gerar PDF, converter e organizar documentos voltam a executar corretamente.
 - Produtos mantêm os dados registrados no documento; modelos não herdam equipamentos de pacotes não selecionados.
 - Duplicação não transfere autorização de imagem para outro cliente.

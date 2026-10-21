@@ -57,11 +57,15 @@ A saída fica em `dist/`: a pasta `AOF Studio` com o programa, o `Instalar.cmd` 
 
 O executável não entra no histórico do git: tem ~97 MB, e o GitHub bloqueia arquivos acima de 100 MiB. Ele é publicado como anexo de um release, que fica fora do histórico.
 
-Atualize a versão no `package.json` e envie uma tag igual:
+O merge de um PR compila e verifica o aplicativo, mas não cria uma tag nem publica uma versão automaticamente. Para publicar, atualize a versão do projeto e do lockfile, faça commit e envie uma tag igual:
 
 ```sh
-git tag v1.2.0
-git push origin v1.2.0
+npm version 1.2.2 --no-git-tag-version
+git add package.json package-lock.json
+git commit -m "release: versão 1.2.2"
+git push
+git tag -a v1.2.2 -m "AOF Studio 1.2.2"
+git push origin v1.2.2
 ```
 
 O workflow **Release do Windows** compila num Windows limpo, roda `npm test` e `npm run verify:exe` e anexa o zip e o `.exe` ao release. Se a tag não corresponder à versão do `package.json`, ele para antes de publicar. O texto do release vem de `.github/release-notes.md`. Para só compilar e conferir sem publicar, use **Run workflow** na aba Actions: os arquivos ficam como artefato da execução por 14 dias.
